@@ -229,6 +229,9 @@ SMTP_USER=$(get_cfg "smtp_user")
 SMTP_PASS=$(get_cfg "smtp_pass")
 SMTP_SSL=$(get_cfg "smtp_ssl")
 
+# 保存一份最新生成的 HTML 邮件用于预览或截图 (完全脱敏)
+echo "$HTML_BODY" > /tmp/dailyreport_email_preview.html 2>/dev/null
+
 if [ "$EMAIL_ENABLED" = "1" ] && [ -n "$MAIL_TO" ]; then
     # 智能 Base64 编码主题（优先 ucode / python3 / openssl / base64，彻底避免精简版 BusyBox 无 base64 命令的问题）
     if command -v ucode >/dev/null 2>&1; then
@@ -264,6 +267,9 @@ if [ "$EMAIL_ENABLED" = "1" ] && [ -n "$MAIL_TO" ]; then
         printf "\r\n"
         printf "%s\r\n" "$HTML_BODY"
     } > "$SEND_TMP"
+
+    # 保存一份最新生成的 HTML 邮件用于预览或截图 (完全脱敏)
+    cp -f "$SEND_TMP" /tmp/dailyreport_email_preview.html 2>/dev/null
 
     # 成功构建报文后，落盘更新增量基准文件（确保下次发送只统计最新增量）
     cp "$CURR_ERR_FILE" "$LAST_ERR_FILE" 2>/dev/null
@@ -386,7 +392,8 @@ if [ "$GOTIFY_ENABLED" = "1" ] && [ -n "$GOTIFY_URL" ] && [ -n "$GOTIFY_TOKEN" ]
              -F "priority=10" 2>&1)
     else
         # 常规状态推送 (Priority 5) — 提供与邮件对齐的全面多模块摘要
-        MSG_TEXT=$(printf "📊 OpenWrt 状态与网络流量日报\n━━━━━━━━━━━━━━━\n⏱️ 运行: %s\n🌡️ CPU: %s°C | WAN IP: %s\n📱 在线设备: %s 台\n" "${UPTIME_CN}" "${TEMP_C}" "${WAN_IP}" "${DEVICE_COUNT}")
+        ACTIVE_CLIENTS_COUNT=$(grep -c '•' "$TRAFFIC_SUMMARY_FILE" 2>/dev/null || echo "$DEVICE_COUNT")
+        MSG_TEXT=$(printf "📊 OpenWrt 状态与网络流量日报\n━━━━━━━━━━━━━━━\n⏱️ 运行: %s\n🌡️ CPU: %s°C | WAN IP: %s\n📱 今日活跃客户端: %s 台 (当前在线: %s 台)\n" "${UPTIME_CN}" "${TEMP_C}" "${WAN_IP}" "${ACTIVE_CLIENTS_COUNT}" "${DEVICE_COUNT}")
         if [ -n "$TRAFFIC_SUMMARY" ]; then
             MSG_TEXT=$(printf "%s\n%s\n" "${MSG_TEXT}" "${TRAFFIC_SUMMARY}")
         fi
@@ -399,9 +406,12 @@ if [ "$GOTIFY_ENABLED" = "1" ] && [ -n "$GOTIFY_URL" ] && [ -n "$GOTIFY_TOKEN" ]
         fi
         MSG_TEXT=$(printf "%s\n🛡️ 安全审计: %s | %s\n" "${MSG_TEXT}" "${LOGIN_SUMMARY:-登录审计正常}" "${BAN_COUNT_BRIEF}")
 
+        # Gotify 标题保持精简，避免右侧时间戳挤压导致换行断字
+        GOTIFY_TITLE="OpenWrt 状态与流量日报"
+        [ "$1" = "test" ] && GOTIFY_TITLE="OpenWrt 状态与流量测试报告"
         G_RES=$(curl -s -w "\n%{http_code}" -X POST "${CLEAN_GOTIFY_URL}/message" \
              -H "X-Gotify-Key: ${GOTIFY_TOKEN}" \
-             -F "title=${MAIL_SUBJECT}" \
+             -F "title=${GOTIFY_TITLE}" \
              -F "message=${MSG_TEXT}" \
              -F "priority=5" 2>&1)
     fi
