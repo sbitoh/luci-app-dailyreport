@@ -15,11 +15,15 @@ OpenWrt 智能系统状态与网络流量日报 LuCI 插件 (Daily Report & Secu
 
 ## 📦 安装说明
 
-下载编译好的 `.ipk` 包，上传至 OpenWrt 后执行：
+### 1. 下载预编译安装包
 
+你可以直接从本仓库下载预编译好的 IPK 包：
+- [点击下载 luci-app-dailyreport_1.0.0-1_all.ipk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.0.0-1_all.ipk)
+
+或者直接在 OpenWrt 终端一键下载安装：
 ```bash
-opkg update
-opkg install luci-app-dailyreport_1.0.0-1_all.ipk
+wget -O /tmp/luci-app-dailyreport.ipk https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.0.0-1_all.ipk
+opkg install /tmp/luci-app-dailyreport.ipk
 /etc/init.d/rpcd reload
 ```
 
