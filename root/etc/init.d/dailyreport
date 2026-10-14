@@ -1,0 +1,79 @@
+#!/bin/sh /etc/rc.common
+
+USE_PROCD=1
+START=95
+STOP=10
+
+CRON_FILE="/etc/crontabs/root"
+SCRIPT="/usr/share/dailyreport/dailyreport_core.sh"
+
+# 存储持久化路径 (Flash 闪存目录，重启不丢)
+PERSIST_DIR="/etc/dailyreport/data"
+mkdir -p "$PERSIST_DIR" 2>/dev/null
+
+save_snapshot() {
+    # 强制 nlbwmon 提交内存数据并备份流量数据库与网站访问记录
+    command -v nlbw >/dev/null 2>&1 && nlbw -c commit >/dev/null 2>&1
+    [ -f "/tmp/usage.db" ] && cp -f "/tmp/usage.db" "$PERSIST_DIR/usage.db" 2>/dev/null
+    [ -f "/root/site_traffic.csv" ] && cp -f "/root/site_traffic.csv" "$PERSIST_DIR/site_traffic.csv" 2>/dev/null
+    [ -f "/root/dns_cache.log" ] && cp -f "/root/dns_cache.log" "$PERSIST_DIR/dns_cache.log" 2>/dev/null
+}
+
+restore_snapshot() {
+    # 开机后若内存中尚未生成数据，自动从持久化目录还原历史快照进行无缝衔接
+    if [ ! -f "/tmp/usage.db" ] && [ -f "$PERSIST_DIR/usage.db" ]; then
+        cp -f "$PERSIST_DIR/usage.db" "/tmp/usage.db" 2>/dev/null
+    fi
+    if [ ! -f "/root/site_traffic.csv" ] && [ -f "$PERSIST_DIR/site_traffic.csv" ]; then
+        cp -f "$PERSIST_DIR/site_traffic.csv" "/root/site_traffic.csv" 2>/dev/null
+    fi
+    if [ ! -f "/root/dns_cache.log" ] && [ -f "$PERSIST_DIR/dns_cache.log" ]; then
+        cp -f "$PERSIST_DIR/dns_cache.log" "/root/dns_cache.log" 2>/dev/null
+    fi
+}
+
+start_service() {
+	local enabled send_hour
+	config_load dailyreport
+	config_get_bool enabled config enabled 1
+	config_get send_hour config send_hour "08"
+
+	# 1. 自动尝试安装并启用 nlbwmon 探针 (如果系统尚未安装)
+	if ! command -v nlbwmon >/dev/null 2>&1; then
+		opkg install --nodeps nlbwmon 2>/dev/null || opkg install nlbwmon 2>/dev/null || true
+		/etc/init.d/nlbwmon enable 2>/dev/null || true
+		/etc/init.d/nlbwmon start 2>/dev/null || true
+	fi
+
+	# 2. 恢复开机前的持久化快照
+	restore_snapshot
+
+	# 2. 清理旧的 crontab 任务
+	sed -i '/dailyreport_core.sh/d' "$CRON_FILE" 2>/dev/null
+
+	# 确保 rpcd 拥有最新的 ACL 权限定义
+	/etc/init.d/rpcd reload 2>/dev/null || /etc/init.d/rpcd restart 2>/dev/null
+
+	if [ "$enabled" -eq 1 ]; then
+		# 1. 每天指定小时整点运行完整日报
+		echo "0 $send_hour * * * $SCRIPT auto" >> "$CRON_FILE"
+		# 2. 每 5 分钟轻量级巡检一次硬件温度（超温时立即发邮件与 Gotify 告警，并视情况关机）
+		echo "*/5 * * * * $SCRIPT check_temp" >> "$CRON_FILE"
+		# 3. 每 2 小时整点轻量刷盘一次快照（保护 Flash 寿命的同时，防止意外断电丢失当天统计）
+		echo "0 */2 * * * $SCRIPT save_snapshot" >> "$CRON_FILE"
+		/etc/init.d/cron reload 2>/dev/null || /etc/init.d/cron restart 2>/dev/null
+	fi
+}
+
+stop_service() {
+	# 关机或重启前执行临终刷盘，保存当前流量与网站访问数据
+	save_snapshot
+
+	sed -i '/dailyreport_core.sh/d' "$CRON_FILE" 2>/dev/null
+	/etc/init.d/cron reload 2>/dev/null || /etc/init.d/cron restart 2>/dev/null
+}
+
+reload_service() {
+	stop_service
+	start_service
+}

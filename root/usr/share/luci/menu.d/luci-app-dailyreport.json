@@ -1,0 +1,21 @@
+{
+	"admin/services": {
+		"title": "服务",
+		"order": 40,
+		"action": {
+			"type": "firstchild",
+			"recurse": true
+		}
+	},
+	"admin/services/dailyreport": {
+		"title": "系统与流量日报",
+		"order": 10,
+		"action": {
+			"type": "view",
+			"path": "dailyreport/config"
+		},
+		"depends": {
+			"uci": { "dailyreport": true }
+		}
+	}
+}

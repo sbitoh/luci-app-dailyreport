@@ -1,0 +1,18 @@
+{
+	"luci-app-dailyreport": {
+		"description": "Grant UCI and execute access for luci-app-dailyreport",
+		"read": {
+			"cgi-io": [ "exec" ],
+			"file": {
+				"/usr/share/dailyreport/dailyreport_core.sh test": [ "exec" ]
+			},
+			"uci": [ "dailyreport" ]
+		},
+		"write": {
+			"file": {
+				"/usr/share/dailyreport/dailyreport_core.sh test": [ "exec" ]
+			},
+			"uci": [ "dailyreport" ]
+		}
+	}
+}
