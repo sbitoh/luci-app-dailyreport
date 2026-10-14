@@ -1,0 +1,107 @@
+msgid ""
+msgstr "Content-Type: text/plain; charset=UTF-8\n"
+
+msgid "System & Traffic Daily Report"
+msgstr "系统与流量日报"
+
+msgid "Automatically collects system health, WAN traffic, top sites, and security audit, delivering scheduled reports."
+msgstr "每日定时汇总系统状态、全网外网流量、网站访问与安全审计，并自动推送报告。"
+
+msgid "General Settings"
+msgstr "基本设置"
+
+msgid "Enable Daily Report Service"
+msgstr "启用日报服务"
+
+msgid "Daily Delivery Hour (O'clock)"
+msgstr "每日推送时间 (整点)"
+
+msgid "CPU High Temp Alert Threshold (°C)"
+msgstr "CPU 高温告警阈值 (°C)"
+
+msgid "Enable Emergency Overheat Shutdown"
+msgstr "启用高温紧急关机保护"
+
+msgid "Sends urgent critical Gotify/Email alert and safely powers off after 3 minutes if CPU exceeds threshold."
+msgstr "当 CPU 温度达到告警阈值时，向 Gotify 发送最高优先级紧急告警，并在 3 分钟后安全关机以保护硬件。"
+
+msgid "Send Test Report"
+msgstr "立即推送测试"
+
+msgid "Generate & Send Report Now"
+msgstr "立即生成并发送日报"
+
+msgid "Generating and Sending Report…"
+msgstr "正在生成并发送日报…"
+
+msgid "Collecting system status and traffic data, sending to configured channels, please wait…"
+msgstr "正在采集系统状态与流量数据，并调用推送通道，请稍候…"
+
+msgid "Test Execution Result"
+msgstr "推送测试结果"
+
+msgid "Execution Output Log:"
+msgstr "执行输出日志："
+
+msgid "(Finished)"
+msgstr "(执行完毕)"
+
+msgid "OK"
+msgstr "确定"
+
+msgid "Execution failed: %s"
+msgstr "执行失败: %s"
+
+msgid "Feature Modules Switch"
+msgstr "功能模块开关"
+
+msgid "LAN Devices WAN Traffic Ranking"
+msgstr "局域网各设备外网流量排行"
+
+msgid "Top 15 Visited Websites Traffic"
+msgstr "网站访问流量 Top 15"
+
+msgid "SSH Login Audit (Incremental)"
+msgstr "SSH 登录审计 (增量)"
+
+msgid "banIP Security Audit (Auto-skipped if not installed)"
+msgstr "banIP 联动处决报告 (若未安装则自动跳过)"
+
+msgid "Email Notification (SMTP)"
+msgstr "邮件推送通道 (SMTP)"
+
+msgid "Enable Email Notification"
+msgstr "启用邮件推送"
+
+msgid "SMTP Server"
+msgstr "SMTP 服务器"
+
+msgid "SMTP Port"
+msgstr "SMTP 端口"
+
+msgid "Enable SSL/TLS"
+msgstr "启用 SSL/TLS"
+
+msgid "Username / Sender Account"
+msgstr "发件人账号 / 用户名"
+
+msgid "Password / Auth Token"
+msgstr "发件人密码 / 授权码"
+
+msgid "Sender Address (From)"
+msgstr "发件人邮箱 (From)"
+
+msgid "Recipient Address (To)"
+msgstr "收件人邮箱 (To)"
+
+msgid "Gotify Notification (Optional)"
+msgstr "Gotify 推送通道 (可选)"
+
+msgid "Enable Gotify Notification"
+msgstr "启用 Gotify 推送"
+
+msgid "Gotify Server URL"
+msgstr "Gotify 服务器地址"
+
+msgid "Gotify App Token"
+msgstr "Gotify 应用 Token"

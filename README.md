@@ -1,39 +1,46 @@
 # luci-app-dailyreport
 
-OpenWrt 智能系统状态与网络流量日报 LuCI 插件 (Daily Report & Security Audit for OpenWrt)。
+[English](README.md) | [中文说明](README_zh.md)
 
-## ✨ 功能特性
+OpenWrt Intelligent System Health, WAN Traffic & Security Audit Daily Report LuCI Application.
 
-- 📶 **公网流量全景**：基于 `nlbwmon` 精准统计今日全网公网吞吐，彻底过滤局域网内部海量备份与无端口裸流，准确呈现各终端真实公网消耗。
-- 🌐 **热门网站访问排行**：精准统计访问流量 Top 15 热门网站。
-- 🛡️ **安全审计与联动处决**：
-  - 实时捕获 **banIP** 当日新增恶意 IP 封禁。
-  - 联动 **nftables 防火墙** 捕获端口防扫（NAS-Port-Ban）动态黑名单增量。
-- 🌡️ **硬件监控与高温保护**：实时采集 CPU 温度，支持超温（可自定义阈值，默认 75°C）邮件/Gotify 即时告警与可选 3 分钟倒计时保护关机。
-- 📬 **双通道富文本推送**：支持自定义 SMTP 邮件推送（HTML 卡片布局）与 Gotify 消息通知。
-- 🧪 **一键测试**：后台支持「立即生成并发送日报」实时调试。
+## ✨ Features
 
-## 📦 安装说明
+- 📶 **Comprehensive WAN Traffic**: Powered by `nlbwmon`. Accurately records total daily public WAN throughput while completely isolating LAN intra-network transfers and raw/portless streams.
+- 📱 **Client Breakdown**: Fair and universal accounting for all LAN devices (NAS, phones, PCs, and dynamically detected new devices).
+- 🌐 **Top 15 Visited Websites**: Identifies and ranks top bandwidth-consuming external domains.
+- 🛡️ **Security Audit & Execution Report**:
+  - Real-time tracking of new daily **banIP** blocklist drops.
+  - Integration with **nftables firewall** to catch port-scanning attempts against exposed services (`NAS-Port-Ban`).
+- 🌡️ **Hardware Health & Overheat Protection**: Monitors CPU temperature, triggers instant critical alerts if exceeding threshold (default: 75°C), with optional safe 3-minute automatic shutdown.
+- 📬 **Dual-Channel Rich Notifications**: Formatted HTML email cards via standard SMTP (using Python native `smtplib`) and instant Gotify push alerts.
+- 🧪 **One-Click Test**: Built-in test trigger in LuCI Web UI for instant end-to-end diagnostics.
 
-本插件采用纯脚本（JavaScript/Shell/Python3）架构，架构标识为 `all`，**全平台通用**（无论 x86_64、ARM64 还是 MIPS 等架构路由器均可直接安装使用）。
+## 📦 Installation
 
-### 1. 下载预编译安装包
+This package is pure JavaScript/Shell/Python3 and uses architecture `all` (compatible with **x86_64, ARM64, MIPS, and all OpenWrt routers**).
 
-你可以直接从本仓库下载预编译好的 IPK 包：
-- [点击下载 luci-app-dailyreport_1.0.0-1_all.ipk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.0.0-1_all.ipk)
+### Download Pre-built IPK
 
-或者直接在 OpenWrt 终端一键下载安装：
+Download directly from the repository:
+- [Download luci-app-dailyreport_1.0.0-1_all.ipk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.0.0-1_all.ipk)
+
+Or install directly via OpenWrt terminal:
 ```bash
 wget -O /tmp/luci-app-dailyreport.ipk https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.0.0-1_all.ipk
 opkg install /tmp/luci-app-dailyreport.ipk
 /etc/init.d/rpcd reload
 ```
 
-## ⚙️ 配置说明
+## ⚙️ Configuration
 
-安装后进入 OpenWrt Web 界面：
-**【状态】 -> 【系统日报】**，按需开启并配置邮件/Gotify 推送凭据即可。
+In OpenWrt Web interface, navigate to:
+**【Services】 -> 【System & Traffic Daily Report】** (服务 -> 系统与流量日报)
 
-## 📄 许可证
+1. Enable the daily report service and choose your preferred daily dispatch hour (e.g., `08:00`).
+2. Configure your Email (SMTP) and/or Gotify server credentials.
+3. Click **Save & Apply**, then click **Generate & Send Report Now** to run an immediate test.
+
+## 📄 License
 
 Licensed under the Apache-2.0 License.

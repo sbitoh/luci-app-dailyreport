@@ -8,7 +8,7 @@
 		}
 	},
 	"admin/services/dailyreport": {
-		"title": "系统与流量日报",
+		"title": "System & Traffic Daily Report",
 		"order": 10,
 		"action": {
 			"type": "view",
