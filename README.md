@@ -15,6 +15,8 @@ OpenWrt 智能系统状态与网络流量日报 LuCI 插件 (Daily Report & Secu
 
 ## 📦 安装说明
 
+本插件采用纯脚本（JavaScript/Shell/Python3）架构，架构标识为 `all`，**全平台通用**（无论 x86_64、ARM64 还是 MIPS 等架构路由器均可直接安装使用）。
+
 ### 1. 下载预编译安装包
 
 你可以直接从本仓库下载预编译好的 IPK 包：
