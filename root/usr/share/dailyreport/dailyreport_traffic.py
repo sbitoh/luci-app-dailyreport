@@ -31,6 +31,9 @@ def get_uci_option(package, section, option, default=""):
         return default
 
 def main():
+    lang = "zh_cn"
+    if len(sys.argv) > 1 and sys.argv[1].lower() in ["en", "english"]:
+        lang = "en"
     enable_traffic = get_uci_option("dailyreport", "config", "enable_traffic", "1") == "1"
     enable_sites = get_uci_option("dailyreport", "config", "enable_sites", "1") == "1"
 
@@ -230,7 +233,10 @@ def main():
         top_dev_lines = []
         if 'dev_sorted' in locals() and dev_sorted:
             top_d = dev_sorted[0]
-            top_dev_str = f" | 榜首: {top_d['name']}({fmt_bytes(top_d['wan_rx'] + top_d['wan_tx'])})"
+            if lang == "en":
+                top_dev_str = f" | Top: {top_d['name']}({fmt_bytes(top_d['wan_rx'] + top_d['wan_tx'])})"
+            else:
+                top_dev_str = f" | 榜首: {top_d['name']}({fmt_bytes(top_d['wan_rx'] + top_d['wan_tx'])})"
             for d in dev_sorted[:5]:
                 top_dev_lines.append(f"  • {d['name']}: ⬇️{fmt_bytes(d['wan_rx'])} ⬆️{fmt_bytes(d['wan_tx'])}")
         
@@ -239,46 +245,85 @@ def main():
             for domain, (dl, ul) in sorted_sites[:5]:
                 top_site_lines.append(f"  • {domain}: {fmt_bytes(dl+ul)}")
 
-        summary_text = f"公网带宽: ⬇️{fmt_bytes(wan_total_rx)} ⬆️{fmt_bytes(wan_total_tx)}{top_dev_str}"
-        if top_dev_lines:
-            summary_text += "\n📱 设备消耗 Top 5:\n" + "\n".join(top_dev_lines)
-        if top_site_lines:
-            summary_text += "\n🌐 热门网站 Top 5:\n" + "\n".join(top_site_lines)
+        if lang == "en":
+            summary_text = f"WAN Bandwidth: ⬇️{fmt_bytes(wan_total_rx)} ⬆️{fmt_bytes(wan_total_tx)}{top_dev_str}"
+            if top_dev_lines:
+                summary_text += "\n📱 Top 5 Devices:\n" + "\n".join(top_dev_lines)
+            if top_site_lines:
+                summary_text += "\n🌐 Top 5 Visited Sites:\n" + "\n".join(top_site_lines)
+        else:
+            summary_text = f"公网带宽: ⬇️{fmt_bytes(wan_total_rx)} ⬆️{fmt_bytes(wan_total_tx)}{top_dev_str}"
+            if top_dev_lines:
+                summary_text += "\n📱 设备消耗 Top 5:\n" + "\n".join(top_dev_lines)
+            if top_site_lines:
+                summary_text += "\n🌐 热门网站 Top 5:\n" + "\n".join(top_site_lines)
 
         with open("/tmp/dailyreport_traffic_summary.txt", "w", encoding="utf-8") as sf:
             sf.write(summary_text)
     except Exception as e:
         pass
 
+    # 双语 HTML 模板定义
+    if lang == "en":
+        title_summary = "📶 Today's WAN Traffic Summary"
+        lbl_rx = "⬇️ WAN Download"
+        lbl_tx = "⬆️ WAN Upload"
+        lbl_tot = "🔄 Total WAN Traffic"
+        title_devs = "📱 LAN Clients WAN Traffic Ranking"
+        th_dev_name = "Device Name"
+        th_dev_ip = "IP Address"
+        th_dev_rx = "Download"
+        th_dev_tx = "Upload"
+        th_dev_tot = "Total WAN"
+        title_sites = "🌐 Top 15 Visited Websites"
+        th_site_domain = "Domain / Service"
+        th_site_rx = "Download"
+        th_site_tx = "Upload"
+    else:
+        title_summary = "📶 今日全网外网流量总览"
+        lbl_rx = "⬇️ 公网下载"
+        lbl_tx = "⬆️ 公网上传"
+        lbl_tot = "🔄 公网总吞吐"
+        title_devs = "📱 局域网各设备外网流量排行"
+        th_dev_name = "设备名称"
+        th_dev_ip = "IP 地址"
+        th_dev_rx = "下载"
+        th_dev_tx = "上传"
+        th_dev_tot = "外网总计"
+        title_sites = "🌐 网站访问流量排行 (Top 15)"
+        th_site_domain = "域名 / 服务"
+        th_site_rx = "下载流量"
+        th_site_tx = "上传流量"
+
     html = f"""
     <div style='margin-bottom:25px;'>
-        <h3 style='font-size:16px; color:#495057; border-left:4px solid #1890ff; padding-left:10px; margin-bottom:15px;'>📶 今日全网外网流量总览</h3>
+        <h3 style='font-size:16px; color:#495057; border-left:4px solid #1890ff; padding-left:10px; margin-bottom:15px;'>{title_summary}</h3>
         <div style='display:flex;gap:15px;margin-bottom:15px;'>
             <div style='flex:1;background:#fff1f0;border:1px solid #ffa39e;border-radius:6px;padding:12px;text-align:center;'>
-                <div style='font-size:12px;color:#666;margin-bottom:4px;'>⬇️ 公网下载</div>
+                <div style='font-size:12px;color:#666;margin-bottom:4px;'>{lbl_rx}</div>
                 <div style='font-size:18px;font-weight:bold;color:#cf1322;'>{fmt_bytes(wan_total_rx)}</div>
             </div>
             <div style='flex:1;background:#f6ffed;border:1px solid #b7eb8f;border-radius:6px;padding:12px;text-align:center;'>
-                <div style='font-size:12px;color:#666;margin-bottom:4px;'>⬆️ 公网上传</div>
+                <div style='font-size:12px;color:#666;margin-bottom:4px;'>{lbl_tx}</div>
                 <div style='font-size:18px;font-weight:bold;color:#389e0d;'>{fmt_bytes(wan_total_tx)}</div>
             </div>
             <div style='flex:1;min-width:130px;background:#fff7e6;border-radius:8px;padding:12px;text-align:center;border-top:3px solid #fa8c16;'>
-                <div style='font-size:12px;color:#666;margin-bottom:4px;'>🔄 公网总吞吐</div>
+                <div style='font-size:12px;color:#666;margin-bottom:4px;'>{lbl_tot}</div>
                 <div style='font-size:18px;font-weight:700;color:#fa8c16;'>{fmt_bytes(wan_total)}</div>
             </div>
         </div>
 
         <div style='margin-top:15px;margin-bottom:15px;'>
-            <h4 style='font-size:14px;color:#333;margin-bottom:8px;'>📱 局域网各设备外网流量排行</h4>
+            <h4 style='font-size:14px;color:#333;margin-bottom:8px;'>{title_devs}</h4>
             <div style='overflow-x:auto;'>
                 <table style='width:100%;border-collapse:collapse;font-size:13px;text-align:left;background:#fff;border-radius:6px;border:1px solid #eee;'>
                     <thead>
                         <tr style='background:#fafafa;color:#666;'>
-                            <th style='padding:8px 10px;border-bottom:1px solid #eee;'>设备名称</th>
-                            <th style='padding:8px 10px;border-bottom:1px solid #eee;'>IP 地址</th>
-                            <th style='padding:8px 10px;border-bottom:1px solid #eee;text-align:right;'>下载</th>
-                            <th style='padding:8px 10px;border-bottom:1px solid #eee;text-align:right;'>上传</th>
-                            <th style='padding:8px 10px;border-bottom:1px solid #eee;text-align:right;'>外网总计</th>
+                            <th style='padding:8px 10px;border-bottom:1px solid #eee;'>{th_dev_name}</th>
+                            <th style='padding:8px 10px;border-bottom:1px solid #eee;'>{th_dev_ip}</th>
+                            <th style='padding:8px 10px;border-bottom:1px solid #eee;text-align:right;'>{th_dev_rx}</th>
+                            <th style='padding:8px 10px;border-bottom:1px solid #eee;text-align:right;'>{th_dev_tx}</th>
+                            <th style='padding:8px 10px;border-bottom:1px solid #eee;text-align:right;'>{th_dev_tot}</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -289,15 +334,15 @@ def main():
         </div>
 
         <div style='margin-top:15px;'>
-            <h4 style='font-size:14px;color:#333;margin-bottom:8px;'>🌐 网站访问流量排行 (Top 15)</h4>
+            <h4 style='font-size:14px;color:#333;margin-bottom:8px;'>{title_sites}</h4>
             <div style='overflow-x:auto;'>
                 <table style='width:100%;border-collapse:collapse;font-size:13px;text-align:left;background:#fff;border-radius:6px;border:1px solid #eee;'>
                     <thead>
                         <tr style='background:#fafafa;color:#666;'>
                             <th style='padding:6px 10px;border-bottom:1px solid #eee;width:40px;text-align:center;'>#</th>
-                            <th style='padding:6px 10px;border-bottom:1px solid #eee;'>域名 / 服务</th>
-                            <th style='padding:6px 10px;border-bottom:1px solid #eee;text-align:right;'>下载流量</th>
-                            <th style='padding:6px 10px;border-bottom:1px solid #eee;text-align:right;'>上传流量</th>
+                            <th style='padding:6px 10px;border-bottom:1px solid #eee;'>{th_site_domain}</th>
+                            <th style='padding:6px 10px;border-bottom:1px solid #eee;text-align:right;'>{th_site_rx}</th>
+                            <th style='padding:6px 10px;border-bottom:1px solid #eee;text-align:right;'>{th_site_tx}</th>
                         </tr>
                     </thead>
                     <tbody>

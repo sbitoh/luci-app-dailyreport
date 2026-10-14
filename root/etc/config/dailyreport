@@ -1,4 +1,5 @@
 config dailyreport 'config'
+	option lang 'zh_cn'
 	option enabled '1'
 	option send_hour '08'
 	option alert_temp '75'

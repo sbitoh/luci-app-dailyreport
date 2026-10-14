@@ -22,6 +22,12 @@ return view.extend({
 		// 1. 基本设置 / General Settings
 		s = m.section(form.NamedSection, 'config', 'dailyreport', tr('基本设置', 'General Settings'));
 
+		o = s.option(form.ListValue, 'lang', tr('插件与报表语言 / Language', 'Language / 语言'));
+		o.value('zh_cn', '简体中文 (Simplified Chinese)');
+		o.value('en', 'English (英文)');
+		o.default = 'zh_cn';
+		o.rmempty = false;
+
 		o = s.option(form.Flag, 'enabled', tr('启用日报服务', 'Enable Daily Report Service'));
 		o.rmempty = false;
 

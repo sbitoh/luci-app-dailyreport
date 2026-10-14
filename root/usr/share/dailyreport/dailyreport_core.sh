@@ -75,8 +75,11 @@ done < /tmp/dhcp.leases
 TRAFFIC_HTML=""
 TRAFFIC_SUMMARY_FILE="/tmp/dailyreport_traffic_summary.txt"
 TRAFFIC_SCRIPT="/usr/share/dailyreport/dailyreport_traffic.py"
-if [ -x "$TRAFFIC_SCRIPT" ]; then
-    TRAFFIC_HTML=$(python3 "$TRAFFIC_SCRIPT" 2>/dev/null)
+REPORT_LANG=$(get_cfg "lang")
+[ -z "$REPORT_LANG" ] && REPORT_LANG="zh_cn"
+
+if [ -f "$TRAFFIC_SCRIPT" ]; then
+    TRAFFIC_HTML=$(python3 "$TRAFFIC_SCRIPT" "$REPORT_LANG" 2>/dev/null)
 fi
 TRAFFIC_SUMMARY=$(cat "$TRAFFIC_SUMMARY_FILE" 2>/dev/null)
 
@@ -169,17 +172,49 @@ if [ "$ENABLE_BANIP" = "1" ]; then
     BAN_IP_HTML="<div style='padding:5px;'>${BANIP_PART}${NFT_PART}</div>"
 fi
 
-# 5. 构建邮件主题与正文
-STATUS_TEXT="系统运行正常"
-STATUS_ICON="🟢"
-MAIL_SUBJECT="OpenWrt 状态与网络流量日报 - $DATE_NOW"
-
-if [ "$TEMP_C" -ge "$ALERT_TEMP" ]; then
-    STATUS_TEXT="🔥 严重过热告警！"
-    STATUS_ICON="🔴"
-    MAIL_SUBJECT="⚠️ 紧急：OpenWrt 过热报警 (${TEMP_C}°C) - $DATE_NOW"
-elif [ "$1" = "test" ]; then
-    MAIL_SUBJECT="OpenWrt 状态与网络流量测试报告 - $DATE_NOW"
+# 5. 构建邮件主题与正文 (根据 REPORT_LANG 自适应中英文)
+if [ "$REPORT_LANG" = "en" ]; then
+    STATUS_TEXT="System Status Healthy"
+    STATUS_ICON="🟢"
+    MAIL_SUBJECT="OpenWrt System & Traffic Daily Report - $DATE_NOW"
+    LBL_TIME="Current Time"
+    LBL_TEMP="CPU Temperature"
+    LBL_UPTIME="System Uptime"
+    LBL_WAN_IP="Public WAN IP"
+    LBL_ONLINE_DEVS="Online Devices"
+    LBL_DEV_NAME="Device Name"
+    LBL_DEV_IP="IP Address"
+    LBL_LOGIN_AUDIT="Login Audit (Incremental)"
+    LBL_SECURITY_TITLE="🛡️ Security & Defense Report"
+    UPTIME_DISP="${UPTIME_DAYS}d ${UPTIME_HOURS}h ${UPTIME_MINS}m"
+    if [ "$TEMP_C" -ge "$ALERT_TEMP" ]; then
+        STATUS_TEXT="🔥 Critical Overheat Alert!"
+        STATUS_ICON="🔴"
+        MAIL_SUBJECT="⚠️ Urgent: OpenWrt Overheat Alert (${TEMP_C}°C) - $DATE_NOW"
+    elif [ "$1" = "test" ]; then
+        MAIL_SUBJECT="OpenWrt System & Traffic Test Report - $DATE_NOW"
+    fi
+else
+    STATUS_TEXT="系统运行正常"
+    STATUS_ICON="🟢"
+    MAIL_SUBJECT="OpenWrt 状态与网络流量日报 - $DATE_NOW"
+    LBL_TIME="当前时间"
+    LBL_TEMP="CPU 温度"
+    LBL_UPTIME="运行时间"
+    LBL_WAN_IP="公网 IP"
+    LBL_ONLINE_DEVS="在线设备"
+    LBL_DEV_NAME="设备名"
+    LBL_DEV_IP="IP 地址"
+    LBL_LOGIN_AUDIT="登录审计 (增量)"
+    LBL_SECURITY_TITLE="🛡️ 联动处决报告"
+    UPTIME_DISP="$UPTIME_CN"
+    if [ "$TEMP_C" -ge "$ALERT_TEMP" ]; then
+        STATUS_TEXT="🔥 严重过热告警！"
+        STATUS_ICON="🔴"
+        MAIL_SUBJECT="⚠️ 紧急：OpenWrt 过热报警 (${TEMP_C}°C) - $DATE_NOW"
+    elif [ "$1" = "test" ]; then
+        MAIL_SUBJECT="OpenWrt 状态与网络流量测试报告 - $DATE_NOW"
+    fi
 fi
 
 HTML_BODY="
@@ -192,24 +227,24 @@ HTML_BODY="
         <div style='padding:25px;'>
             <div style='background:#f8f9fa; border:1px solid #e9ecef; border-radius:8px; padding:20px; margin-bottom:25px;'>
                 $([ "$TEMP_C" -ge "$ALERT_TEMP" ] && echo "<div style='background:#fff1f0;border:1px solid #ffa39e;border-radius:6px;padding:12px;margin-bottom:15px;color:#cf1322;font-weight:bold;'>⚠️ 严重过热报警：当前 CPU 温度已达 ${TEMP_C}°C，超过设定的安全阈值 ${ALERT_TEMP}°C！$([ \"$AUTO_POWEROFF\" = \"1\" ] && echo \"系统已启动 3 分钟紧急关机保护！\")</div>")
-                <div style='font-size:16px; margin-bottom:10px; border-bottom:1px dashed #ddd; padding-bottom:8px;'>📅 <b>当前时间：</b> <span style='color:#555;'>$DATE_NOW</span></div>
-                <div style='font-size:16px; margin-bottom:10px; border-bottom:1px dashed #ddd; padding-bottom:8px;'>🌡️ <b>CPU 温度：</b> <strong style='color:$TEMP_COLOR;'>$TEMP_C°C</strong></div>
-                <div style='font-size:16px; margin-bottom:10px; border-bottom:1px dashed #ddd; padding-bottom:8px;'>⏱️ <b>运行时间：</b> <span style='color:#555;'>$UPTIME_CN</span></div>
-                <div style='font-size:16px;'>🏠 <b>公网 IP：</b> <strong style='color:#007bff; font-family:monospace;'>$WAN_IP</strong></div>
+                <div style='font-size:16px; margin-bottom:10px; border-bottom:1px dashed #ddd; padding-bottom:8px;'>📅 <b>${LBL_TIME}：</b> <span style='color:#555;'>$DATE_NOW</span></div>
+                <div style='font-size:16px; margin-bottom:10px; border-bottom:1px dashed #ddd; padding-bottom:8px;'>🌡️ <b>${LBL_TEMP}：</b> <strong style='color:$TEMP_COLOR;'>$TEMP_C°C</strong></div>
+                <div style='font-size:16px; margin-bottom:10px; border-bottom:1px dashed #ddd; padding-bottom:8px;'>⏱️ <b>${LBL_UPTIME}：</b> <span style='color:#555;'>$UPTIME_DISP</span></div>
+                <div style='font-size:16px;'>🏠 <b>${LBL_WAN_IP}：</b> <strong style='color:#007bff; font-family:monospace;'>$WAN_IP</strong></div>
             </div>
 
-            <h3 style='font-size:16px; color:#495057; border-left:4px solid #17a2b8; padding-left:10px; margin-bottom:15px;'>📱 在线设备 ($DEVICE_COUNT 台)</h3>
+            <h3 style='font-size:16px; color:#495057; border-left:4px solid #17a2b8; padding-left:10px; margin-bottom:15px;'>📱 ${LBL_ONLINE_DEVS} ($DEVICE_COUNT)</h3>
             <table style='width:100%; border-collapse:collapse; font-size:14px; margin-bottom:25px; text-align:left;'>
-                <tr style='background:#e9ecef;'><th style='padding:8px; border:1px solid #dee2e6;'>设备名</th><th style='padding:8px; border:1px solid #dee2e6;'>IP 地址</th></tr>
+                <tr style='background:#e9ecef;'><th style='padding:8px; border:1px solid #dee2e6;'>${LBL_DEV_NAME}</th><th style='padding:8px; border:1px solid #dee2e6;'>${LBL_DEV_IP}</th></tr>
                 $DEVICE_TABLE_ROWS
             </table>
 
-            <h3 style='font-size:16px; color:#495057; border-left:4px solid #28a745; padding-left:10px; margin-bottom:15px;'>👤 登录审计 (增量)</h3>
+            <h3 style='font-size:16px; color:#495057; border-left:4px solid #28a745; padding-left:10px; margin-bottom:15px;'>👤 ${LBL_LOGIN_AUDIT}</h3>
             <div style='margin-bottom:25px;'>$LOGIN_HTML</div>
 
             $TRAFFIC_HTML
 
-            $([ -n "$BAN_IP_HTML" ] && echo "<h3 style='font-size:16px; color:#dc3545; border-left:4px solid #dc3545; padding-left:10px; margin-bottom:15px;'>🛡️ 联动处决报告</h3><div style='margin-bottom:25px;'>$BAN_IP_HTML</div>")
+            $([ -n "$BAN_IP_HTML" ] && echo "<h3 style='font-size:16px; color:#dc3545; border-left:4px solid #dc3545; padding-left:10px; margin-bottom:15px;'>${LBL_SECURITY_TITLE}</h3><div style='margin-bottom:25px;'>$BAN_IP_HTML</div>")
         </div>
         <div style='background:#f8f9fa; text-align:center; padding:15px; color:#adb5bd; font-size:12px; border-top:1px solid #e9ecef;'>
             Generated securely by luci-app-dailyreport for OpenWrt
@@ -391,24 +426,36 @@ if [ "$GOTIFY_ENABLED" = "1" ] && [ -n "$GOTIFY_URL" ] && [ -n "$GOTIFY_TOKEN" ]
              -F "message=${ALERT_MSG}" \
              -F "priority=10" 2>&1)
     else
-        # 常规状态推送 (Priority 5) — 提供与邮件对齐的全面多模块摘要
-        ACTIVE_CLIENTS_COUNT=$(grep -c '•' "$TRAFFIC_SUMMARY_FILE" 2>/dev/null || echo "$DEVICE_COUNT")
-        MSG_TEXT=$(printf "📊 OpenWrt 状态与网络流量日报\n━━━━━━━━━━━━━━━\n⏱️ 运行: %s\n🌡️ CPU: %s°C | WAN IP: %s\n📱 今日活跃客户端: %s 台 (当前在线: %s 台)\n" "${UPTIME_CN}" "${TEMP_C}" "${WAN_IP}" "${ACTIVE_CLIENTS_COUNT}" "${DEVICE_COUNT}")
-        if [ -n "$TRAFFIC_SUMMARY" ]; then
-            MSG_TEXT=$(printf "%s\n%s\n" "${MSG_TEXT}" "${TRAFFIC_SUMMARY}")
+        # Gotify 标题与正文 (根据 REPORT_LANG 自适应)
+        if [ "$REPORT_LANG" = "en" ]; then
+            GOTIFY_TITLE="OpenWrt Daily Report"
+            [ "$1" = "test" ] && GOTIFY_TITLE="OpenWrt Daily Report (Test)"
+            ACTIVE_CLIENTS_COUNT=$(grep -c '•' "$TRAFFIC_SUMMARY_FILE" 2>/dev/null || echo "$DEVICE_COUNT")
+            MSG_TEXT=$(printf "📊 OpenWrt System & WAN Traffic Report\n━━━━━━━━━━━━━━━\n⏱️ Uptime: %s\n🌡️ CPU: %s°C | WAN IP: %s\n📱 Active Clients: %s (Online: %s)\n" "${UPTIME_DAYS}d ${UPTIME_HOURS}h ${UPTIME_MINS}m" "${TEMP_C}" "${WAN_IP}" "${ACTIVE_CLIENTS_COUNT}" "${DEVICE_COUNT}")
+            if [ -n "$TRAFFIC_SUMMARY" ]; then
+                MSG_TEXT=$(printf "%s\n%s\n" "${MSG_TEXT}" "${TRAFFIC_SUMMARY}")
+            fi
+            BAN_COUNT_BRIEF="Drops: 0"
+            if [ -f "$CURR_BANIP_FILE" ] || [ -f "$CURR_NFT_FILE" ]; then
+                B_CNT=$(cat "$CURR_BANIP_FILE" "$CURR_NFT_FILE" 2>/dev/null | wc -l)
+                [ "$B_CNT" -gt 0 ] && BAN_COUNT_BRIEF="Drops: ${B_CNT} events"
+            fi
+            MSG_TEXT=$(printf "%s\n🛡️ Security: %s | %s\n" "${MSG_TEXT}" "Audited" "${BAN_COUNT_BRIEF}")
+        else
+            GOTIFY_TITLE="OpenWrt 状态与流量日报"
+            [ "$1" = "test" ] && GOTIFY_TITLE="OpenWrt 状态与流量测试报告"
+            ACTIVE_CLIENTS_COUNT=$(grep -c '•' "$TRAFFIC_SUMMARY_FILE" 2>/dev/null || echo "$DEVICE_COUNT")
+            MSG_TEXT=$(printf "📊 OpenWrt 状态与网络流量日报\n━━━━━━━━━━━━━━━\n⏱️ 运行: %s\n🌡️ CPU: %s°C | WAN IP: %s\n📱 今日活跃客户端: %s 台 (当前在线: %s 台)\n" "${UPTIME_CN}" "${TEMP_C}" "${WAN_IP}" "${ACTIVE_CLIENTS_COUNT}" "${DEVICE_COUNT}")
+            if [ -n "$TRAFFIC_SUMMARY" ]; then
+                MSG_TEXT=$(printf "%s\n%s\n" "${MSG_TEXT}" "${TRAFFIC_SUMMARY}")
+            fi
+            BAN_COUNT_BRIEF="拦截: 0"
+            if [ -f "$CURR_BANIP_FILE" ] || [ -f "$CURR_NFT_FILE" ]; then
+                B_CNT=$(cat "$CURR_BANIP_FILE" "$CURR_NFT_FILE" 2>/dev/null | wc -l)
+                [ "$B_CNT" -gt 0 ] && BAN_COUNT_BRIEF="拦截: ${B_CNT} 次恶意探测"
+            fi
+            MSG_TEXT=$(printf "%s\n🛡️ 安全审计: %s | %s\n" "${MSG_TEXT}" "${LOGIN_SUMMARY:-登录审计正常}" "${BAN_COUNT_BRIEF}")
         fi
-        
-        # 附带安全审计与处决摘要
-        BAN_COUNT_BRIEF="拦截: 0"
-        if [ -f "$CURR_BANIP_FILE" ] || [ -f "$CURR_NFT_FILE" ]; then
-            B_CNT=$(cat "$CURR_BANIP_FILE" "$CURR_NFT_FILE" 2>/dev/null | wc -l)
-            [ "$B_CNT" -gt 0 ] && BAN_COUNT_BRIEF="拦截: ${B_CNT} 次恶意探测"
-        fi
-        MSG_TEXT=$(printf "%s\n🛡️ 安全审计: %s | %s\n" "${MSG_TEXT}" "${LOGIN_SUMMARY:-登录审计正常}" "${BAN_COUNT_BRIEF}")
-
-        # Gotify 标题保持精简，避免右侧时间戳挤压导致换行断字
-        GOTIFY_TITLE="OpenWrt 状态与流量日报"
-        [ "$1" = "test" ] && GOTIFY_TITLE="OpenWrt 状态与流量测试报告"
         G_RES=$(curl -s -w "\n%{http_code}" -X POST "${CLEAN_GOTIFY_URL}/message" \
              -H "X-Gotify-Key: ${GOTIFY_TOKEN}" \
              -F "title=${GOTIFY_TITLE}" \
