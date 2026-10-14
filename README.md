@@ -4,6 +4,12 @@
 
 OpenWrt Intelligent System Health, WAN Traffic & Security Audit Daily Report LuCI Application.
 
+## 📸 Screenshots
+
+| Email HTML Report Card (Rich Visual Layout) | Gotify Push Notification (Real-time Alert) |
+| :---: | :---: |
+| <img src="assets/email_preview.png" width="450" /> | <img src="assets/gotify_preview.jpg" width="350" /> |
+
 ## ✨ Features
 
 - 📶 **Comprehensive WAN Traffic**: Powered by `nlbwmon`. Accurately records total daily public WAN throughput while completely isolating LAN intra-network transfers and raw/portless streams.

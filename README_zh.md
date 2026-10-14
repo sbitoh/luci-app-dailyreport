@@ -4,6 +4,12 @@
 
 OpenWrt 智能系统状态与网络流量日报 LuCI 插件 (Daily Report & Security Audit for OpenWrt)。
 
+## 📸 效果预览
+
+| 邮件 HTML 报表卡片 (富文本排版) | Gotify 实时即时推送通知 |
+| :---: | :---: |
+| <img src="assets/email_preview.png" width="450" /> | <img src="assets/gotify_preview.jpg" width="350" /> |
+
 ## ✨ 功能特性
 
 - 📶 **公网流量全景**：基于 `nlbwmon` 精准统计今日全网公网吞吐，彻底过滤局域网内部海量备份与无端口裸流，准确呈现各终端真实公网消耗。
