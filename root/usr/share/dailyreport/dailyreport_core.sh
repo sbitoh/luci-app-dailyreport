@@ -71,12 +71,18 @@ TOTAL_SECONDS=$(awk '{print int($1)}' /proc/uptime 2>/dev/null || echo 3600)
 DAYS=$((TOTAL_SECONDS / 86400))
 HOURS=$(( (TOTAL_SECONDS % 86400) / 3600 ))
 MINS=$(( (TOTAL_SECONDS % 3600) / 60 ))
+UPTIME_DAYS=$DAYS
+UPTIME_HOURS=$HOURS
+UPTIME_MINS=$MINS
 if [ "$DAYS" -gt 0 ]; then
     UPTIME_CN="${DAYS}天 ${HOURS}小时 ${MINS}分钟"
+    UPTIME_EN="${DAYS}d ${HOURS}h ${MINS}m"
 elif [ "$HOURS" -gt 0 ]; then
     UPTIME_CN="${HOURS}小时 ${MINS}分钟"
+    UPTIME_EN="${HOURS}h ${MINS}m"
 else
     UPTIME_CN="${MINS}分钟"
+    UPTIME_EN="${MINS}m"
 fi
 
 WAN_IP=$(ifconfig pppoe-wan 2>/dev/null | grep 'inet ' | awk '{print $2}' | cut -d: -f2)
@@ -287,7 +293,7 @@ if [ "$REPORT_LANG" = "en" ]; then
     LBL_DEV_IP="IP Address"
     LBL_LOGIN_AUDIT="Login Audit (Incremental)"
     LBL_SECURITY_TITLE="🛡️ Security & Defense Report"
-    UPTIME_DISP="${UPTIME_DAYS}d ${UPTIME_HOURS}h ${UPTIME_MINS}m"
+    UPTIME_DISP="$UPTIME_EN"
     if [ "$TEMP_C" -ge "$ALERT_TEMP" ]; then
         STATUS_TEXT="🔥 Critical Overheat Alert!"
         STATUS_ICON="🔴"
@@ -532,7 +538,7 @@ if [ "$GOTIFY_ENABLED" = "1" ] && [ -n "$GOTIFY_URL" ] && [ -n "$GOTIFY_TOKEN" ]
             GOTIFY_TITLE="OpenWrt Daily Report"
             [ "$1" = "test" ] && GOTIFY_TITLE="OpenWrt Daily Report (Test)"
             ACTIVE_CLIENTS_COUNT=$(grep -c '•' "$TRAFFIC_SUMMARY_FILE" 2>/dev/null || echo "$DEVICE_COUNT")
-            MSG_TEXT=$(printf "📊 OpenWrt System & WAN Traffic Report\n━━━━━━━━━━━━━━━\n⏱️ Uptime: %s\n🌡️ CPU: %s°C | WAN IP: %s\n📱 Active Clients: %s (Online: %s)\n" "${UPTIME_DAYS}d ${UPTIME_HOURS}h ${UPTIME_MINS}m" "${TEMP_C}" "${WAN_IP}" "${ACTIVE_CLIENTS_COUNT}" "${DEVICE_COUNT}")
+            MSG_TEXT=$(printf "📊 OpenWrt System & WAN Traffic Report\n━━━━━━━━━━━━━━━\n⏱️ Uptime: %s\n🌡️ CPU: %s°C | WAN IP: %s\n📱 Active Clients: %s (Online: %s)\n" "${UPTIME_EN}" "${TEMP_C}" "${WAN_IP}" "${ACTIVE_CLIENTS_COUNT}" "${DEVICE_COUNT}")
             if [ -n "$TRAFFIC_SUMMARY" ]; then
                 MSG_TEXT=$(printf "%s\n%s\n" "${MSG_TEXT}" "${TRAFFIC_SUMMARY}")
             fi
