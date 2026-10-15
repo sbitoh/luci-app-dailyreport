@@ -42,6 +42,7 @@ def main():
 
     # 1. 建立主机名和 MAC 映射表
     mac_to_name = {}
+    ip_to_name = {}
     ip_to_mac = {}
 
     # 从 UCI 读取静态分配
@@ -67,6 +68,8 @@ def main():
                     mac_to_name[m.lower()] = name
             if sec in ips and sec in macs:
                 ip_to_mac[ips[sec]] = macs[sec].split()[0].lower()
+            if sec in ips:
+                ip_to_name[ips[sec]] = name
     except Exception:
         pass
 
@@ -81,6 +84,8 @@ def main():
                         ip_to_mac[ip] = mac
                         if name != "*" and mac not in mac_to_name:
                             mac_to_name[mac] = name
+                        if ip not in ip_to_name and name != "*":
+                            ip_to_name[ip] = name
         except Exception:
             pass
 
