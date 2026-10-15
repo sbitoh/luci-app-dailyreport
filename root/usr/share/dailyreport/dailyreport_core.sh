@@ -59,14 +59,91 @@ WAN_IP=$(ifconfig pppoe-wan 2>/dev/null | grep 'inet ' | awk '{print $2}' | cut 
 [ -z "$WAN_IP" ] && WAN_IP=$(curl -s -m 2 http://ifconfig.me 2>/dev/null)
 [ -z "$WAN_IP" ] && WAN_IP="获取失败"
 
-DEVICE_COUNT=$(cat /tmp/dhcp.leases 2>/dev/null | wc -l)
+# 1. 采集在线设备 (整合 ARP 活跃邻居与 DHCP 租约，并从静态绑定解析友好名称)
+ONLINE_DEVS_TMP="/tmp/dailyreport_online_devs.txt"
+python3 - << 'PYEOF' > "$ONLINE_DEVS_TMP" 2>/dev/null
+import subprocess, os
+
+mac_to_name = {}
+ip_to_name = {}
+
+# 1. 读取 UCI 静态分配
+try:
+    out = subprocess.check_output(["uci", "show", "dhcp"], text=True)
+    names, ips, macs = {}, {}, {}
+    for line in out.splitlines():
+        if ".name=" in line:
+            sec = line.split(".")[1].split("=")[0]
+            val = line.split("=")[1].strip("'\"")
+            names[sec] = val
+        elif ".ip=" in line:
+            sec = line.split(".")[1].split("=")[0]
+            val = line.split("=")[1].strip("'\"")
+            ips[sec] = val
+        elif ".mac=" in line:
+            sec = line.split(".")[1].split("=")[0]
+            val = line.split("=")[1].strip("'\"")
+            macs[sec] = val
+    for sec, name in names.items():
+        if sec in macs:
+            for m in macs[sec].split():
+                mac_to_name[m.lower()] = name
+        if sec in ips:
+            ip_to_name[ips[sec]] = name
+except Exception:
+    pass
+
+# 2. 读取 /tmp/dhcp.leases 补充动态租约
+dhcp_leases = {}
+if os.path.exists("/tmp/dhcp.leases"):
+    try:
+        with open("/tmp/dhcp.leases", "r", encoding="utf-8", errors="ignore") as f:
+            for line in f:
+                parts = line.strip().split()
+                if len(parts) >= 4:
+                    mac, ip, name = parts[1].lower(), parts[2], parts[3]
+                    if name != "*":
+                        if mac not in mac_to_name:
+                            mac_to_name[mac] = name
+                    dhcp_leases[ip] = mac
+    except Exception:
+        pass
+
+# 3. 读取 ip neigh 活跃局域网邻居 (精准捕获包含 NAS、静态IP设备在内的真实在线设备)
+online = {}
+try:
+    neigh = subprocess.check_output(["ip", "neigh"], text=True)
+    for line in neigh.splitlines():
+        parts = line.strip().split()
+        if len(parts) >= 4 and parts[0].startswith("192.168.") and parts[0] != "192.168.1.1":
+            ip = parts[0]
+            if "FAILED" not in line and "lladdr" in parts:
+                idx = parts.index("lladdr")
+                mac = parts[idx+1].lower()
+                dname = mac_to_name.get(mac, ip_to_name.get(ip, f"设备 ({ip})"))
+                online[ip] = (dname, mac)
+except Exception:
+    pass
+
+# 将仍有效但 ARP 暂处于延迟态的 DHCP 租约设备也补充纳入
+for ip, mac in dhcp_leases.items():
+    if ip not in online and ip != "192.168.1.1":
+        dname = mac_to_name.get(mac, ip_to_name.get(ip, f"设备 ({ip})"))
+        online[ip] = (dname, mac)
+
+# 按 IP 地址排序输出
+for ip in sorted(online.keys(), key=lambda x: [int(c) for c in x.split('.') if c.isdigit()]):
+    name, mac = online[ip]
+    print(f"{ip}\t{name}")
+PYEOF
+
+DEVICE_COUNT=$(wc -l < "$ONLINE_DEVS_TMP" 2>/dev/null || echo 0)
 DEVICE_TABLE_ROWS=""
-while read -r line; do
-    D_NAME=$(echo "$line" | awk '{print $4}')
-    D_IP=$(echo "$line" | awk '{print $3}')
+while IFS=$'\t' read -r D_IP D_NAME; do
+    [ -z "$D_IP" ] && continue
     [ "$D_NAME" = "*" ] && D_NAME="未知设备"
-    DEVICE_TABLE_ROWS="${DEVICE_TABLE_ROWS}<tr><td style='border:1px solid #eee;padding:8px;'>$D_NAME</td><td style='border:1px solid #eee;padding:8px;font-family:monospace;'>$D_IP</td></tr>"
-done < /tmp/dhcp.leases
+    DEVICE_TABLE_ROWS="${DEVICE_TABLE_ROWS}<tr><td style='border:1px solid #eee;padding:8px;font-weight:600;'>$D_NAME</td><td style='border:1px solid #eee;padding:8px;font-family:monospace;'>$D_IP</td></tr>"
+done < "$ONLINE_DEVS_TMP"
 
 # 2. 流量统计与网站排行 (执行前先触发一次实时增量采集更新)
 [ -x /root/dns_cache_update.sh ] && /root/dns_cache_update.sh 2>/dev/null
