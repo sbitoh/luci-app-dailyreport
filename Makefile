@@ -5,7 +5,7 @@ LUCI_DEPENDS:=+python3 +curl
 LUCI_PKGARCH:=all
 
 PKG_NAME:=luci-app-dailyreport
-PKG_VERSION:=1.1.0
+PKG_VERSION:=1.2.0
 PKG_RELEASE:=1
 PKG_MAINTAINER:=OpenWrt Community
 PKG_LICENSE:=GPL-3.0

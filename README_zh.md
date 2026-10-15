@@ -28,13 +28,27 @@ OpenWrt 智能系统状态与网络流量日报 LuCI 插件 (Daily Report & Secu
 
 ### 1. 下载预编译安装包
 
-你可以直接从本仓库下载预编译好的 IPK 包：
-- [点击下载 luci-app-dailyreport_1.1.0-1_all.ipk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.1.0-1_all.ipk)
+根据你固件所使用的包管理器选择对应格式：
 
-或者在 OpenWrt 终端一条命令直装：
+#### 传统 `opkg` 环境 (OpenWrt 24.10, 23.05 及历史固件)
+- 📦 **最新版 v1.2.0**: [点击下载 luci-app-dailyreport_1.2.0-1_all.ipk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.2.0-1_all.ipk)
+- 📦 **历史版 v1.1.0**: [点击下载 luci-app-dailyreport_1.1.0-1_all.ipk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.1.0-1_all.ipk)
+- 📦 **初始版 v1.0.0**: [点击下载 luci-app-dailyreport_1.0.0-1_all.ipk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.0.0-1_all.ipk)
+
+OpenWrt 终端一键安装：
 ```bash
-wget -O /tmp/luci-app-dailyreport.ipk https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.1.0-1_all.ipk
+wget -O /tmp/luci-app-dailyreport.ipk https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.2.0-1_all.ipk
 opkg install /tmp/luci-app-dailyreport.ipk
+/etc/init.d/rpcd reload
+```
+
+#### 新版 `apk` (APK v3) 环境 (OpenWrt SNAPSHOT / 主线开发版)
+- 🚀 **v1.2.0 APK 安装包**: [点击下载 luci-app-dailyreport-1.2.0-r1.apk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport-1.2.0-r1.apk)
+
+OpenWrt 终端一键安装：
+```bash
+wget -O /tmp/luci-app-dailyreport.apk https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport-1.2.0-r1.apk
+apk add --allow-untrusted /tmp/luci-app-dailyreport.apk
 /etc/init.d/rpcd reload
 ```
 
@@ -48,6 +62,13 @@ opkg install /tmp/luci-app-dailyreport.ipk
 3. 点击 **保存并应用**，点击 **立即生成并发送日报** 即可立即测试。
 
 ## 📝 更新日志 (Release Notes)
+
+### v1.2.0 (2026-10-15)
+* 🚀 **正式支持 OpenWrt 官方下一代 `apk` (APK v3) 包管理**：
+  * 构建了原生的 `.apk` 安装包（`luci-app-dailyreport-1.2.0-r1.apk`），支持在 OpenWrt SNAPSHOT / 主线新固件上一键 `apk add` 安装。
+  * 保持双格式同步发布：传统固件使用 `.ipk`（`opkg`），新固件使用 `.apk`（`apk`）。
+* 📦 **版本归档机制健全**：GitHub Releases 与 `bin/packages/` 中完整保留所有历史版本资源（v1.0.0、v1.1.0、v1.2.0），绝不覆盖历史文件。
+* ⏱️ **修复英文模式下运行时长 (Uptime) 显示**：补齐英文版邮件与 Gotify 推送中缺少的系统运行时长数据。
 
 ### v1.1.0 (2026-10-15)
 * 🌐 **新增顶部中英文显式切换**：在 Web 基本设置最顶部加入语言选择，界面与推送报表（HTML 邮件与 Gotify 推送）全自适应中英文双语。
