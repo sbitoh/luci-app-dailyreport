@@ -15,8 +15,9 @@ ALERT_TEMP=$(get_cfg "alert_temp")
 
 # 0. 检查是否跨天并重置每日流量统计
 TODAY_TAG=$(date +%Y%m%d)
-LAST_DAY_FILE="/etc/dailyreport/data/last_date.tag"
-mkdir -p /etc/dailyreport/data 2>/dev/null
+PERSIST_DIR="/etc/dailyreport/data"
+LAST_DAY_FILE="$PERSIST_DIR/last_date.tag"
+mkdir -p "$PERSIST_DIR" 2>/dev/null
 
 if [ -f "$LAST_DAY_FILE" ]; then
     LAST_DAY=$(cat "$LAST_DAY_FILE" 2>/dev/null)
@@ -32,6 +33,8 @@ if [ "$LAST_DAY" != "$TODAY_TAG" ]; then
     command -v nlbw >/dev/null 2>&1 && nlbw -c commit >/dev/null 2>&1
     /etc/init.d/wrtbwmon restart 2>/dev/null || true
     echo "$TODAY_TAG" > "$LAST_DAY_FILE"
+    # 同时清除历史快照底数
+    rm -f "$PERSIST_DIR/usage.db" "$PERSIST_DIR/site_traffic.csv" 2>/dev/null
 fi
 
 # 硬件温度采集

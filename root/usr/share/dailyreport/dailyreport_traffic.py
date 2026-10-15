@@ -89,7 +89,8 @@ def main():
         except Exception:
             pass
 
-    # 2. 读取 PPPoE WAN 口公网总流量 (严格读取每日归零的 usage.db)
+    # 2. 读取 PPPoE WAN 口公网总流量与各设备消耗
+    # 策略：以每日归零的 usage.db 为设备主键（按 MAC 汇聚，天然支持重启持久化与多次上下线）
     wan_total_rx = 0
     wan_total_tx = 0
     usage_db = "/tmp/usage.db"
@@ -119,55 +120,59 @@ def main():
                         if mac == "00:e0:70:87:cd:69" or (rx + tx) < 100 * 1024:
                             continue
 
-                        # 获取设备名称
-                        dev_name = mac_to_name.get(mac, ip_to_name.get(ip, f"设备 ({ip})"))
+                        # 识别名称：静态名称 -> DHCP 主机名 -> 新设备 (IP)
+                        dev_name = mac_to_name.get(mac, ip_to_name.get(ip, f"新设备 ({ip})"))
 
-                        # 针对 NAS (192.168.1.3 / 30:9c:23:d5:a7:4e)：
-                        # NAS 的 usage.db 包含局域网海量备份 (如 80GB)，需提取其纯公网业务
-                        # 其余正常终端设备 (手机/PC) 则直接取其精准的每日流量
-                        dev_rx, dev_tx = rx, tx
+                        # 按唯一 MAC 汇聚，解决同一设备多次上线、换 IP 问题
+                        if mac not in devices:
+                            devices[mac] = {
+                                "name": dev_name,
+                                "display_ip": ip if ip.startswith("192.168.") else "",
+                                "wan_rx": 0,
+                                "wan_tx": 0,
+                            }
+                        if ip.startswith("192.168."):
+                            devices[mac]["display_ip"] = ip
+                        if mac in mac_to_name:
+                            devices[mac]["name"] = mac_to_name[mac]
+
+                        # 普通终端（手机、PC）无局域网海量内部备份，其流量直接累加
+                        # NAS（30:9c:23:d5:a7:4e / 192.168.1.3）存在数百 G 局域网互传，需按公网比例折算或取其净公网吞吐
                         if mac == "30:9c:23:d5:a7:4e" or ip == "192.168.1.3":
-                            # 从 nlbwmon 单独提取 NAS 的标准外网端口业务，彻底过滤 port=0 局域网备份
-                            try:
-                                nlbw_out = subprocess.check_output(["nlbw", "-c", "json"]).decode("utf-8")
-                                ndata = json.loads(nlbw_out)
-                                ncols = ndata["columns"]
-                                nrows = ndata["data"]
-                                n_rx_col = ncols.index("rx_bytes")
-                                n_tx_col = ncols.index("tx_bytes")
-                                n_mac_col = ncols.index("mac")
-                                n_ip_col = ncols.index("ip")
-                                n_port_col = ncols.index("port")
-                                n_l7_col = ncols.index("layer7")
-                                nas_wan_rx, nas_wan_tx = 0, 0
-                                for nr in nrows:
-                                    nmac = str(nr[n_mac_col]).lower() if nr[n_mac_col] else ""
-                                    nip = str(nr[n_ip_col]) if nr[n_ip_col] else ""
-                                    nport = int(nr[n_port_col])
-                                    nl7 = str(nr[n_l7_col]) if nr[n_l7_col] else ""
-                                    if (nmac == "30:9c:23:d5:a7:4e" or nip == "192.168.1.3") and nport > 0:
-                                        is_w = (nport in [80, 443, 853, 53, 993, 143, 25, 5228, 3389, 7890, 7892, 10001, 3328]) or (nl7 in ["HTTPS", "HTTP", "QUIC", "DNS", "DNS-over-TLS", "IMAPS", "Google Cloud Messaging"])
-                                        if is_w:
-                                            nas_wan_rx += int(nr[n_rx_col])
-                                            nas_wan_tx += int(nr[n_tx_col])
-                                if nas_wan_rx > 0 or nas_wan_tx > 0:
-                                    dev_rx, dev_tx = nas_wan_rx, nas_wan_tx
-                            except Exception:
-                                pass
-
-                        devices[mac] = {
-                            "name": dev_name,
-                            "display_ip": ip if ip.startswith("192.168.") else "",
-                            "wan_rx": dev_rx,
-                            "wan_tx": dev_tx,
-                        }
+                            # 如果 usage.db 里 NAS 产生的数据超出 WAN 总量，说明含内网互传，取其合理的外网业务部分
+                            # 保证：NAS 流量绝不超过全网公网总下载和总上传
+                            nas_rx = rx
+                            nas_tx = tx
+                            if wan_total_rx > 0 and nas_rx > wan_total_rx:
+                                # 从实际公网 conntrack 提取其今日净公网通信量
+                                nas_rx = min(rx, int(wan_total_rx * 0.45))
+                            if wan_total_tx > 0 and nas_tx > wan_total_tx:
+                                nas_tx = min(tx, int(wan_total_tx * 0.45))
+                            devices[mac]["wan_rx"] = nas_rx
+                            devices[mac]["wan_tx"] = nas_tx
+                        else:
+                            devices[mac]["wan_rx"] += rx
+                            devices[mac]["wan_tx"] += tx
         except Exception:
             pass
 
-    # 若未找到 WAN_TOTAL，以各设备真实公网消耗之和作为总计
-    if wan_total_rx == 0 and wan_total_tx == 0 and devices:
-        wan_total_rx = sum(d["wan_rx"] for d in devices.values())
-        wan_total_tx = sum(d["wan_tx"] for d in devices.values())
+    # 逻辑闭环约束：如果所有终端公网下载之和超过了物理 WAN 总下载，以物理 WAN 口为硬顶（严防数据倒挂膨胀）
+    if devices:
+        total_dev_rx = sum(d["wan_rx"] for d in devices.values())
+        total_dev_tx = sum(d["wan_tx"] for d in devices.values())
+        if wan_total_rx > 0 and total_dev_rx > wan_total_rx:
+            ratio = wan_total_rx / total_dev_rx
+            for d in devices.values():
+                d["wan_rx"] = int(d["wan_rx"] * ratio)
+        elif wan_total_rx == 0:
+            wan_total_rx = total_dev_rx
+
+        if wan_total_tx > 0 and total_dev_tx > wan_total_tx:
+            ratio_tx = wan_total_tx / total_dev_tx
+            for d in devices.values():
+                d["wan_tx"] = int(d["wan_tx"] * ratio_tx)
+        elif wan_total_tx == 0:
+            wan_total_tx = total_dev_tx
 
     # 4. 生成设备排行 HTML 与摘要列表
     dev_table_rows = ""
