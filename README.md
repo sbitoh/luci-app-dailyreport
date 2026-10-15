@@ -29,11 +29,11 @@ This package is pure JavaScript/Shell/Python3 and uses architecture `all` (compa
 ### Download Pre-built IPK
 
 Download directly from the repository:
-- [Download luci-app-dailyreport_1.0.0-1_all.ipk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.0.0-1_all.ipk)
+- [Download luci-app-dailyreport_1.1.0-1_all.ipk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.1.0-1_all.ipk)
 
 Or install directly via OpenWrt terminal:
 ```bash
-wget -O /tmp/luci-app-dailyreport.ipk https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.0.0-1_all.ipk
+wget -O /tmp/luci-app-dailyreport.ipk https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.1.0-1_all.ipk
 opkg install /tmp/luci-app-dailyreport.ipk
 /etc/init.d/rpcd reload
 ```
@@ -46,6 +46,22 @@ In OpenWrt Web interface, navigate to:
 1. Enable the daily report service and choose your preferred daily dispatch hour (e.g., `08:00`).
 2. Configure your Email (SMTP) and/or Gotify server credentials.
 3. Click **Save & Apply**, then click **Generate & Send Report Now** to run an immediate test.
+
+## 📝 Release Notes
+
+### v1.1.0 (2026-10-15)
+* 🌐 **Top-level Language Switch**: Added an explicit language switcher at the top of the General Settings tab. Both the Web UI and outgoing reports (HTML Email & Gotify notifications) fully adapt to Simplified Chinese or English.
+* 💾 **Configuration Persistence**: Integrated `conffiles` packaging support to ensure existing credentials and custom settings are preserved during upgrades or reinstalls.
+* 📱 **Client Ranking & Lifecycle Architecture**:
+  * **MAC-based Identity**: Tracks clients by physical MAC addresses rather than volatile IPs, preventing metric fragmentation across disconnects and IP renegotiations.
+  * **Dynamic Device Discovery**: Automatically catches new active clients (guests, new hardware) and gracefully resolves hostnames via DHCP leases.
+  * **Unified Online Device Detection**: Combines kernel ARP neighbor cache (`ip neigh`) with static lease definitions to accurately report online status for servers (e.g. NAS) and static devices.
+* 📶 **WAN Traffic Convergence & Reset Guard**:
+  * Implemented WAN hardware boundary capping to prevent intra-LAN backup traffic from skewing client summaries.
+  * Added automated midnight (00:00) counter rollbacks to eliminate cross-day traffic accumulation.
+  * Enhanced Flash snapshot persistence to ensure data continuity across router reboots.
+
+---
 
 ## 📄 License
 

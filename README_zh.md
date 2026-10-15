@@ -29,11 +29,11 @@ OpenWrt 智能系统状态与网络流量日报 LuCI 插件 (Daily Report & Secu
 ### 1. 下载预编译安装包
 
 你可以直接从本仓库下载预编译好的 IPK 包：
-- [点击下载 luci-app-dailyreport_1.0.0-1_all.ipk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.0.0-1_all.ipk)
+- [点击下载 luci-app-dailyreport_1.1.0-1_all.ipk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.1.0-1_all.ipk)
 
-或者直接在 OpenWrt 终端一键下载安装：
+或者在 OpenWrt 终端一条命令直装：
 ```bash
-wget -O /tmp/luci-app-dailyreport.ipk https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.0.0-1_all.ipk
+wget -O /tmp/luci-app-dailyreport.ipk https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.1.0-1_all.ipk
 opkg install /tmp/luci-app-dailyreport.ipk
 /etc/init.d/rpcd reload
 ```
@@ -46,6 +46,22 @@ opkg install /tmp/luci-app-dailyreport.ipk
 1. 开启日报服务并选择每日发送时间（如 `08:00`）。
 2. 按需配置邮件推送（SMTP）或 Gotify 服务器凭据。
 3. 点击 **保存并应用**，点击 **立即生成并发送日报** 即可立即测试。
+
+## 📝 更新日志 (Release Notes)
+
+### v1.1.0 (2026-10-15)
+* 🌐 **新增顶部中英文显式切换**：在 Web 基本设置最顶部加入语言选择，界面与推送报表（HTML 邮件与 Gotify 推送）全自适应中英文双语。
+* 💾 **安装与升级配置持久化保护**：注入 `conffiles` 保护协议，再次安装或升级版本时自动保留现有邮箱凭据与推送配置，杜绝被空模板覆盖。
+* 📱 **局域网设备统计架构重构**：
+  * **唯一身份认准物理 MAC**：解决终端断开重连、多次上线、或者更换 IP 造成的重复计算与流量碎片化。
+  * **新设备智能捕获与自愈命名**：支持新接入终端（访客 WiFi、新设备）即时自动建档，自动解析 DHCP 主机名并优雅兜底。
+  * **在线设备全面识别**：融合系统内核 ARP 邻居（`ip neigh`）与静态绑定表，完整识别 NAS 及静态 IP 主机在线状态。
+* 📶 **全网流量闭环约束与防倒挂**：
+  * 引入物理 WAN 口硬顶约束，确保设备排行总计与公网总吞吐严格收敛，彻底杜绝 NAS 等大流量设备数据倒挂。
+  * 新增跨天（0点）自动清零守护，解决多天跨度累积导致的流量虚高问题。
+  * 增强 Flash 快照定时落盘，提供路由器意外重启后的抗损恢复能力。
+
+---
 
 ## 📄 许可证
 
