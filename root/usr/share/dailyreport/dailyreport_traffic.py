@@ -164,8 +164,9 @@ def main():
         wan_total_rx = sum(d["wan_rx"] for d in devices.values())
         wan_total_tx = sum(d["wan_tx"] for d in devices.values())
 
-    # 4. 生成设备排行 HTML
+    # 4. 生成设备排行 HTML 与摘要列表
     dev_table_rows = ""
+    dev_sorted = []
     if devices:
         dev_sorted = sorted(devices.values(), key=lambda x: x["wan_rx"] + x["wan_tx"], reverse=True)
         for d in dev_sorted:
