@@ -89,90 +89,95 @@ def main():
         except Exception:
             pass
 
-    # 2. 读取 PPPoE WAN 口公网总流量与各设备消耗
-    # 策略：以每日归零的 usage.db 为设备主键（按 MAC 汇聚，天然支持重启持久化与多次上下线）
-    wan_total_rx = 0
-    wan_total_tx = 0
-    usage_db = "/tmp/usage.db"
+    # 2. 从 nlbwmon 提取真实外网端口业务流量 (无视代理与劫持，彻底剔除 port=0 的内部海量备份)
+    # 通过保存每日基准快照 /etc/dailyreport/data/nlbw_base.json 实现真正的【今日净增量】
     devices = {}
+    nlbw_base_file = "/etc/dailyreport/data/nlbw_base.json"
+    nlbw_cur_raw = {}
 
-    if enable_traffic and os.path.exists(usage_db):
+    if enable_traffic:
         try:
-            with open(usage_db, "r", encoding="utf-8", errors="ignore") as f:
-                for line in f:
-                    if line.startswith("#"):
-                        continue
-                    parts = line.strip().split(",")
-                    if len(parts) >= 8:
-                        mac = parts[0].lower().strip()
-                        ip = parts[1].strip()
-                        iface = parts[2].strip()
-                        rx = int(parts[5])
-                        tx = int(parts[6])
+            # 强制 commit 刷盘确保抓取最新数据
+            subprocess.run(["nlbw", "-c", "commit"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            out = subprocess.check_output(["nlbw", "-c", "json"]).decode("utf-8")
+            data = json.loads(out)
+            cols = data["columns"]
+            rows = data["data"]
 
-                        # 捕获物理 WAN 口公网总计
-                        if mac == "00:00:00:00:00:00" or iface == "pppoe-wan":
-                            wan_total_rx = rx
-                            wan_total_tx = tx
-                            continue
+            rx_col = cols.index("rx_bytes")
+            tx_col = cols.index("tx_bytes")
+            mac_col = cols.index("mac")
+            ip_col = cols.index("ip")
+            port_col = cols.index("port")
 
-                        # 排除路由器网桥自身，以及流量极小的噪音 (降至 1KB 灵敏度)
-                        if mac == "00:e0:70:87:cd:69" or (rx + tx) < 1024:
-                            continue
+            # 聚合当前 nlbwmon 各设备的外网端口累计
+            for r in rows:
+                mac = str(r[mac_col]).lower() if r[mac_col] else ""
+                ip = str(r[ip_col]) if r[ip_col] else ""
+                port = int(r[port_col])
+                rx = int(r[rx_col])
+                tx = int(r[tx_col])
 
-                        # 识别名称：静态名称 -> DHCP 主机名 -> 新设备 (IP)
-                        dev_name = mac_to_name.get(mac, ip_to_name.get(ip, f"新设备 ({ip})"))
+                # 排除无效 MAC、路由器网桥、Docker 虚拟网段以及 port=0 内部无端口直连与海量局域网备份
+                if not mac or mac in ["00:00:00:00:00:00", "00:e0:70:87:cd:69"]:
+                    continue
+                if ip == "127.0.0.1" or ip.startswith("172."):
+                    continue
+                if port == 0:
+                    continue
 
-                        # 按唯一 MAC 汇聚，解决同一设备多次上线、换 IP 问题
-                        if mac not in devices:
-                            devices[mac] = {
-                                "name": dev_name,
-                                "display_ip": ip if ip.startswith("192.168.") else "",
-                                "wan_rx": 0,
-                                "wan_tx": 0,
-                            }
-                        if ip.startswith("192.168."):
-                            devices[mac]["display_ip"] = ip
-                        if mac in mac_to_name:
-                            devices[mac]["name"] = mac_to_name[mac]
-
-                        # 普通终端（手机、PC）无局域网海量内部备份，其流量直接累加
-                        # NAS（30:9c:23:d5:a7:4e / 192.168.1.3）存在数百 G 局域网互传，需按公网比例折算或取其净公网吞吐
-                        if mac == "30:9c:23:d5:a7:4e" or ip == "192.168.1.3":
-                            # 如果 usage.db 里 NAS 产生的数据超出 WAN 总量，说明含内网互传，取其合理的外网业务部分
-                            # 保证：NAS 流量绝不超过全网公网总下载和总上传
-                            nas_rx = rx
-                            nas_tx = tx
-                            if wan_total_rx > 0 and nas_rx > wan_total_rx:
-                                # 从实际公网 conntrack 提取其今日净公网通信量
-                                nas_rx = min(rx, int(wan_total_rx * 0.45))
-                            if wan_total_tx > 0 and nas_tx > wan_total_tx:
-                                nas_tx = min(tx, int(wan_total_tx * 0.45))
-                            devices[mac]["wan_rx"] = nas_rx
-                            devices[mac]["wan_tx"] = nas_tx
-                        else:
-                            devices[mac]["wan_rx"] += rx
-                            devices[mac]["wan_tx"] += tx
+                if mac not in nlbw_cur_raw:
+                    nlbw_cur_raw[mac] = {"rx": 0, "tx": 0, "ip": ip}
+                nlbw_cur_raw[mac]["rx"] += rx
+                nlbw_cur_raw[mac]["tx"] += tx
+                if ip.startswith("192.168."):
+                    nlbw_cur_raw[mac]["ip"] = ip
         except Exception:
             pass
 
-    # 逻辑闭环约束：如果所有终端公网下载之和超过了物理 WAN 总下载，以物理 WAN 口为硬顶（严防数据倒挂膨胀）
-    if devices:
-        total_dev_rx = sum(d["wan_rx"] for d in devices.values())
-        total_dev_tx = sum(d["wan_tx"] for d in devices.values())
-        if wan_total_rx > 0 and total_dev_rx > wan_total_rx:
-            ratio = wan_total_rx / total_dev_rx
-            for d in devices.values():
-                d["wan_rx"] = int(d["wan_rx"] * ratio)
-        elif wan_total_rx == 0:
-            wan_total_rx = total_dev_rx
+    # 读取今日 0 点的底数基准 (nlbw_base.json)
+    base_data = {}
+    if os.path.exists(nlbw_base_file):
+        try:
+            with open(nlbw_base_file, "r", encoding="utf-8") as bf:
+                base_data = json.load(bf)
+        except Exception:
+            pass
+    else:
+        # 首次运行或跨天重置后，将当前值作为今日起点
+        try:
+            os.makedirs("/etc/dailyreport/data", exist_ok=True)
+            with open(nlbw_base_file, "w", encoding="utf-8") as bf:
+                json.dump(nlbw_cur_raw, bf)
+            base_data = nlbw_cur_raw
+        except Exception:
+            pass
 
-        if wan_total_tx > 0 and total_dev_tx > wan_total_tx:
-            ratio_tx = wan_total_tx / total_dev_tx
-            for d in devices.values():
-                d["wan_tx"] = int(d["wan_tx"] * ratio_tx)
-        elif wan_total_tx == 0:
-            wan_total_tx = total_dev_tx
+    # 计算今日纯净增量
+    for mac, cur in nlbw_cur_raw.items():
+        b_rx = base_data.get(mac, {}).get("rx", 0)
+        b_tx = base_data.get(mac, {}).get("tx", 0)
+        
+        # 增量计算 (若基准大于当前值，说明 nlbwmon 重置过，直接以当前值为准)
+        diff_rx = cur["rx"] - b_rx if cur["rx"] >= b_rx else cur["rx"]
+        diff_tx = cur["tx"] - b_tx if cur["tx"] >= b_tx else cur["tx"]
+
+        # 过滤小于 1KB 的背景杂讯
+        if (diff_rx + diff_tx) < 1024:
+            continue
+
+        ip = cur["ip"]
+        dev_name = mac_to_name.get(mac, ip_to_name.get(ip, f"新设备 ({ip})"))
+        devices[mac] = {
+            "name": dev_name,
+            "display_ip": ip if ip.startswith("192.168.") else "",
+            "wan_rx": diff_rx,
+            "wan_tx": diff_tx,
+        }
+
+    # 3. 统计全网公网总吞吐 (以各终端设备真实外网增量之和，严密闭环，绝不倒挂)
+    wan_total_rx = sum(d["wan_rx"] for d in devices.values())
+    wan_total_tx = sum(d["wan_tx"] for d in devices.values())
 
     # 4. 生成设备排行 HTML 与摘要列表
     dev_table_rows = ""
