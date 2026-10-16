@@ -116,8 +116,8 @@ def main():
                             wan_total_tx = tx
                             continue
 
-                        # 排除路由器网桥自身，以及流量极小的噪音
-                        if mac == "00:e0:70:87:cd:69" or (rx + tx) < 100 * 1024:
+                        # 排除路由器网桥自身，以及流量极小的噪音 (降至 1KB 灵敏度)
+                        if mac == "00:e0:70:87:cd:69" or (rx + tx) < 1024:
                             continue
 
                         # 识别名称：静态名称 -> DHCP 主机名 -> 新设备 (IP)

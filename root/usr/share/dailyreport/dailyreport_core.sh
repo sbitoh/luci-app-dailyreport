@@ -28,7 +28,8 @@ fi
 
 if [ "$LAST_DAY" != "$TODAY_TAG" ]; then
     # 新的一天：清零每日累计，确保每天数据完全干净
-    > /tmp/usage.db 2>/dev/null
+    echo '#mac,ip,iface,speed_in,speed_out,in,out,total,first_date,last_date' > /tmp/usage.db 2>/dev/null
+    echo '#mac,ip,iface,speed_in,speed_out,in,out,total,first_date,last_date' > /tmp/usage.6.db 2>/dev/null
     > /root/site_traffic.csv 2>/dev/null
     command -v nlbw >/dev/null 2>&1 && nlbw -c commit >/dev/null 2>&1
     /etc/init.d/wrtbwmon restart 2>/dev/null || true
@@ -178,6 +179,7 @@ done < "$ONLINE_DEVS_TMP"
 # 2. 流量统计与网站排行 (执行前先触发一次实时增量采集更新)
 [ -x /root/dns_cache_update.sh ] && /root/dns_cache_update.sh 2>/dev/null
 [ -x /root/site_traffic_update.sh ] && /root/site_traffic_update.sh 2>/dev/null
+[ -x /usr/sbin/wrtbwmon ] && /usr/sbin/wrtbwmon -4 -f /tmp/usage.db >/dev/null 2>&1 || true
 
 TRAFFIC_HTML=""
 TRAFFIC_SUMMARY_FILE="/tmp/dailyreport_traffic_summary.txt"
