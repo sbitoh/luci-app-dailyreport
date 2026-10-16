@@ -31,23 +31,25 @@ This package is pure JavaScript/Shell/Python3 and uses architecture `all` (compa
 Download directly from the repository according to your OpenWrt package manager:
 
 #### 1. Traditional `opkg` (OpenWrt 24.10, 23.05, and earlier)
-- 📦 **Latest v1.2.0**: [Download luci-app-dailyreport_1.2.0-1_all.ipk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.2.0-1_all.ipk)
+- 📦 **Latest v1.3.0**: [Download luci-app-dailyreport_1.3.0-1_all.ipk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.3.0-1_all.ipk)
+- 📦 **Legacy v1.2.0**: [Download luci-app-dailyreport_1.2.0-1_all.ipk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.2.0-1_all.ipk)
 - 📦 **Legacy v1.1.0**: [Download luci-app-dailyreport_1.1.0-1_all.ipk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.1.0-1_all.ipk)
 - 📦 **Legacy v1.0.0**: [Download luci-app-dailyreport_1.0.0-1_all.ipk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.0.0-1_all.ipk)
 
 Or install directly via OpenWrt terminal:
 ```bash
-wget -O /tmp/luci-app-dailyreport.ipk https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.2.0-1_all.ipk
+wget -O /tmp/luci-app-dailyreport.ipk https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.3.0-1_all.ipk
 opkg install /tmp/luci-app-dailyreport.ipk
 /etc/init.d/rpcd reload
 ```
 
 #### 2. Modern `apk` (OpenWrt SNAPSHOT / APK v3)
-- 🚀 **v1.2.0 APK**: [Download luci-app-dailyreport-1.2.0-r1.apk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport-1.2.0-r1.apk)
+- 🚀 **Latest v1.3.0 APK**: [Download luci-app-dailyreport-1.3.0-r1.apk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport-1.3.0-r1.apk)
+- 🚀 **Legacy v1.2.0 APK**: [Download luci-app-dailyreport-1.2.0-r1.apk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport-1.2.0-r1.apk)
 
 Install directly via OpenWrt terminal:
 ```bash
-wget -O /tmp/luci-app-dailyreport.apk https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport-1.2.0-r1.apk
+wget -O /tmp/luci-app-dailyreport.apk https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport-1.3.0-r1.apk
 apk add --allow-untrusted /tmp/luci-app-dailyreport.apk
 /etc/init.d/rpcd reload
 ```
@@ -62,6 +64,17 @@ In OpenWrt Web interface, navigate to:
 3. Click **Save & Apply**, then click **Generate & Send Report Now** to run an immediate test.
 
 ## 📝 Release Notes
+
+### v1.3.0 (2026-10-16)
+* 📶 **Dual-Track Real WAN Traffic Cross-Verification**:
+  * **Physical Interface Delta**: Independently measures daily bytes from the hardware/PPP interface (`pppoe-wan`) for authoritative carrier-grade accuracy.
+  * **Per-Host WAN Aggregation**: Leverages `nlbwmon` to filter intra-LAN backups while accurately tracking external traffic for every active client.
+  * Reports present both physical throughput and client sum side-by-side for 100% transparent verification.
+* ⏱️ **Atomic Midnight (00:00) Snapshot Guard**:
+  * Atomically synchronizes device and interface baselines (`nlbw_base.json` & `wan_base.json`) at midnight, eliminating untracked early morning traffic.
+* 🌐 **DNS Cache Daily Rollover & Hardening**:
+  * Automatically rolls over `/root/dns_cache.log` daily to keep top domain statistics clean and relevant.
+  * Removed deprecated legacy routines for improved efficiency.
 
 ### v1.2.0 (2026-10-15)
 * 🚀 **Full Support for Next-Gen `apk` (APK v3) Package Manager**:

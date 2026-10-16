@@ -29,12 +29,13 @@ fi
 if [ "$LAST_DAY" != "$TODAY_TAG" ]; then
     # 新的一天：清零每日累计，确保每天数据完全干净
     > /root/site_traffic.csv 2>/dev/null
-    # 重置今日 nlbwmon 基准底数文件
-    rm -f "$PERSIST_DIR/nlbw_base.json" 2>/dev/null
-    command -v nlbw >/dev/null 2>&1 && nlbw -c commit >/dev/null 2>&1
-    echo "$TODAY_TAG" > "$LAST_DAY_FILE"
-    # 同时清除历史快照底数
+    > /root/dns_cache.log 2>/dev/null
     rm -f "$PERSIST_DIR/site_traffic.csv" 2>/dev/null
+    rm -f "$PERSIST_DIR/dns_cache.log" 2>/dev/null
+    # 强制提交 nlbwmon 并由 traffic.py 生成当天的 0 点起跑线基准 (nlbw_base.json + wan_base.json)
+    command -v nlbw >/dev/null 2>&1 && nlbw -c commit >/dev/null 2>&1
+    [ -f /usr/share/dailyreport/dailyreport_traffic.py ] && python3 /usr/share/dailyreport/dailyreport_traffic.py --reset-base "$REPORT_LANG" >/dev/null 2>&1
+    echo "$TODAY_TAG" > "$LAST_DAY_FILE"
 fi
 
 # 硬件温度采集
@@ -43,10 +44,8 @@ TEMP_C=$((TEMP_RAW / 1000))
 
 # 持久化刷盘动作 (save_snapshot)
 if [ "$1" = "save_snapshot" ]; then
-    PERSIST_DIR="/etc/dailyreport/data"
     mkdir -p "$PERSIST_DIR" 2>/dev/null
     command -v nlbw >/dev/null 2>&1 && nlbw -c commit >/dev/null 2>&1
-    [ -f "/tmp/usage.db" ] && cp -f "/tmp/usage.db" "$PERSIST_DIR/usage.db" 2>/dev/null
     [ -f "/root/site_traffic.csv" ] && cp -f "/root/site_traffic.csv" "$PERSIST_DIR/site_traffic.csv" 2>/dev/null
     [ -f "/root/dns_cache.log" ] && cp -f "/root/dns_cache.log" "$PERSIST_DIR/dns_cache.log" 2>/dev/null
     exit 0
