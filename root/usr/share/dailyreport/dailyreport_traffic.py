@@ -199,24 +199,32 @@ def main():
         except Exception:
             pass
 
-    # 计算今日各终端纯净增量
-    for mac, cur in nlbw_cur_raw.items():
-        b_rx = base_data.get(mac, {}).get("rx", 0)
-        b_tx = base_data.get(mac, {}).get("tx", 0)
+    # 联合所有已知 MAC：包含基准里的历史活跃设备、当前有流量设备以及 DHCP 静态绑定设备
+    all_tracked_macs = set(base_data.keys()) | set(nlbw_cur_raw.keys()) | set(mac_to_name.keys())
+
+    # 计算今日各终端纯净增量 (不遗漏待机、睡眠或离线设备)
+    for mac in all_tracked_macs:
+        cur = nlbw_cur_raw.get(mac, {"rx": 0, "tx": 0, "ip": base_data.get(mac, {}).get("ip", "")})
+        base = base_data.get(mac, {"rx": 0, "tx": 0, "ip": cur["ip"]})
         
-        diff_rx = cur["rx"] - b_rx if cur["rx"] >= b_rx else cur["rx"]
-        diff_tx = cur["tx"] - b_tx if cur["tx"] >= b_tx else cur["tx"]
+        diff_rx = cur["rx"] - base["rx"] if cur["rx"] >= base["rx"] else cur["rx"]
+        diff_tx = cur["tx"] - base["tx"] if cur["tx"] >= base["tx"] else cur["tx"]
 
-        if (diff_rx + diff_tx) < 1024:
-            continue
+        ip = cur["ip"] or base.get("ip", "")
+        # 若仍无 IP，尝试从 DHCP 映射获取
+        if not ip:
+            for lease_ip, l_mac in ip_to_mac.items():
+                if l_mac == mac:
+                    ip = lease_ip
+                    break
 
-        ip = cur["ip"]
-        dev_name = mac_to_name.get(mac, ip_to_name.get(ip, f"新设备 ({ip})"))
+        dev_name = mac_to_name.get(mac, ip_to_name.get(ip, f"设备 [{mac.upper()}]"))
         devices[mac] = {
             "name": dev_name,
-            "display_ip": ip if ip.startswith("192.168.") else "",
+            "display_ip": ip if ip.startswith("192.168.") else mac.upper(),
             "wan_rx": diff_rx,
             "wan_tx": diff_tx,
+            "total": diff_rx + diff_tx
         }
 
     # 轨 A：终端聚合增量求和
@@ -257,18 +265,26 @@ def main():
     wan_total_tx = wan_phy_tx if wan_phy_tx > 0 else dev_total_tx
     wan_total = wan_total_rx + wan_total_tx
 
+    # 轨 C：代理分流与路由系统自身流量 (包含 OpenClash 旁路/透明代理、系统 DNS 及后台更新)
+    proxy_system_total = wan_total - (dev_total_rx + dev_total_tx) if wan_total > (dev_total_rx + dev_total_tx) else 0
+
     # 3. 生成设备排行 HTML 与摘要列表
     dev_table_rows = ""
     dev_sorted = []
     if devices:
-        dev_sorted = sorted(devices.values(), key=lambda x: x["wan_rx"] + x["wan_tx"], reverse=True)
+        dev_sorted = sorted(devices.values(), key=lambda x: x["total"], reverse=True)
         for d in dev_sorted:
-            tot = d["wan_rx"] + d["wan_tx"]
+            tot = d["total"]
             rx_f = fmt_bytes(d["wan_rx"])
             tx_f = fmt_bytes(d["wan_tx"])
-            tot_f = fmt_bytes(tot)
+            if tot > 0:
+                tot_f = fmt_bytes(tot)
+                status_badge = ""
+            else:
+                tot_f = "0 B"
+                status_badge = " <span style='font-size:11px;color:#999;font-weight:normal;'>(待机/离线)</span>"
             disp_ip = d["display_ip"] if d["display_ip"] else "局域网设备"
-            dev_table_rows += f"<tr><td style='padding:8px 10px;border-bottom:1px solid #f0f0f0;font-weight:600;color:#333;'>{d['name']}</td><td style='padding:8px 10px;border-bottom:1px solid #f0f0f0;color:#666;font-family:monospace;'>{disp_ip}</td><td style='padding:8px 10px;border-bottom:1px solid #f0f0f0;color:#1890ff;text-align:right;'>⬇️ {rx_f}</td><td style='padding:8px 10px;border-bottom:1px solid #f0f0f0;color:#52c41a;text-align:right;'>⬆️ {tx_f}</td><td style='padding:8px 10px;border-bottom:1px solid #f0f0f0;font-weight:700;color:#fa8c16;text-align:right;'>{tot_f}</td></tr>\n"
+            dev_table_rows += f"<tr><td style='padding:8px 10px;border-bottom:1px solid #f0f0f0;font-weight:600;color:#333;'>{d['name']}{status_badge}</td><td style='padding:8px 10px;border-bottom:1px solid #f0f0f0;color:#666;font-family:monospace;'>{disp_ip}</td><td style='padding:8px 10px;border-bottom:1px solid #f0f0f0;color:#1890ff;text-align:right;'>⬇️ {rx_f}</td><td style='padding:8px 10px;border-bottom:1px solid #f0f0f0;color:#52c41a;text-align:right;'>⬆️ {tx_f}</td><td style='padding:8px 10px;border-bottom:1px solid #f0f0f0;font-weight:700;color:#fa8c16;text-align:right;'>{tot_f}</td></tr>\n"
 
     if not dev_table_rows:
         dev_table_rows = "<tr><td colspan='5' style='padding:12px;text-align:center;color:#999;'>暂无活跃外网流量记录</td></tr>"
@@ -345,9 +361,11 @@ def main():
         lbl_tx = "⬆️ WAN Upload"
         lbl_tot = "🔄 Total WAN Traffic"
         lbl_dev_sub = "Clients Sum"
+        lbl_proxy_title = "🌐 Proxy / System Route"
+        lbl_proxy_sub = "OpenClash / Router"
         title_devs = "📱 LAN Clients WAN Traffic Ranking"
         th_dev_name = "Device Name"
-        th_dev_ip = "IP Address"
+        th_dev_ip = "IP / MAC"
         th_dev_rx = "Download"
         th_dev_tx = "Upload"
         th_dev_tot = "Total WAN"
@@ -361,9 +379,11 @@ def main():
         lbl_tx = "⬆️ 公网上传"
         lbl_tot = "🔄 公网总吞吐"
         lbl_dev_sub = "终端统计"
+        lbl_proxy_title = "🌐 代理/路由系统分流"
+        lbl_proxy_sub = "OpenClash/系统"
         title_devs = "📱 局域网各设备外网流量排行"
         th_dev_name = "设备名称"
-        th_dev_ip = "IP 地址"
+        th_dev_ip = "IP / MAC"
         th_dev_rx = "下载"
         th_dev_tx = "上传"
         th_dev_tot = "外网总计"
@@ -375,7 +395,7 @@ def main():
     html = f"""
     <div style='margin-bottom:25px;'>
         <h3 style='font-size:16px; color:#495057; border-left:4px solid #1890ff; padding-left:10px; margin-bottom:15px;'>{title_summary}</h3>
-        <div style='display:flex;gap:15px;margin-bottom:15px;'>
+        <div style='display:flex;gap:12px;margin-bottom:15px;'>
             <div style='flex:1;background:#fff1f0;border:1px solid #ffa39e;border-radius:6px;padding:12px;text-align:center;'>
                 <div style='font-size:12px;color:#666;margin-bottom:4px;'>{lbl_rx}</div>
                 <div style='font-size:18px;font-weight:bold;color:#cf1322;'>{fmt_bytes(wan_total_rx)}</div>
@@ -386,10 +406,15 @@ def main():
                 <div style='font-size:18px;font-weight:bold;color:#389e0d;'>{fmt_bytes(wan_total_tx)}</div>
                 <div style='font-size:11px;color:#888;margin-top:3px;'>{lbl_dev_sub}: {fmt_bytes(dev_total_tx)}</div>
             </div>
-            <div style='flex:1;min-width:130px;background:#fff7e6;border-radius:8px;padding:12px;text-align:center;border-top:3px solid #fa8c16;'>
+            <div style='flex:1;background:#fff7e6;border:1px solid #ffd591;border-radius:6px;padding:12px;text-align:center;'>
                 <div style='font-size:12px;color:#666;margin-bottom:4px;'>{lbl_tot}</div>
                 <div style='font-size:18px;font-weight:700;color:#fa8c16;'>{fmt_bytes(wan_total)}</div>
                 <div style='font-size:11px;color:#888;margin-top:3px;'>{lbl_dev_sub}: {fmt_bytes(dev_total_rx + dev_total_tx)}</div>
+            </div>
+            <div style='flex:1;background:#f0f5ff;border:1px solid #adc6ff;border-radius:6px;padding:12px;text-align:center;'>
+                <div style='font-size:12px;color:#666;margin-bottom:4px;'>{lbl_proxy_title}</div>
+                <div style='font-size:18px;font-weight:700;color:#2f54eb;'>{fmt_bytes(proxy_system_total)}</div>
+                <div style='font-size:11px;color:#888;margin-top:3px;'>{lbl_proxy_sub}</div>
             </div>
         </div>
 

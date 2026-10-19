@@ -31,25 +31,27 @@ OpenWrt 智能系统状态与网络流量日报 LuCI 插件 (Daily Report & Secu
 根据你固件所使用的包管理器选择对应格式：
 
 #### 传统 `opkg` 环境 (OpenWrt 24.10, 23.05 及历史固件)
-- 📦 **最新版 v1.3.0**: [点击下载 luci-app-dailyreport_1.3.0-1_all.ipk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.3.0-1_all.ipk)
+- 📦 **最新版 v1.3.1**: [点击下载 luci-app-dailyreport_1.3.1-1_all.ipk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.3.1-1_all.ipk)
+- 📦 **历史版 v1.3.0**: [点击下载 luci-app-dailyreport_1.3.0-1_all.ipk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.3.0-1_all.ipk)
 - 📦 **历史版 v1.2.0**: [点击下载 luci-app-dailyreport_1.2.0-1_all.ipk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.2.0-1_all.ipk)
 - 📦 **历史版 v1.1.0**: [点击下载 luci-app-dailyreport_1.1.0-1_all.ipk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.1.0-1_all.ipk)
 - 📦 **初始版 v1.0.0**: [点击下载 luci-app-dailyreport_1.0.0-1_all.ipk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.0.0-1_all.ipk)
 
 OpenWrt 终端一键安装：
 ```bash
-wget -O /tmp/luci-app-dailyreport.ipk https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.3.0-1_all.ipk
+wget -O /tmp/luci-app-dailyreport.ipk https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.3.1-1_all.ipk
 opkg install /tmp/luci-app-dailyreport.ipk
 /etc/init.d/rpcd reload
 ```
 
 #### 新版 `apk` (APK v3) 环境 (OpenWrt SNAPSHOT / 主线开发版)
-- 🚀 **最新版 v1.3.0 APK**: [点击下载 luci-app-dailyreport-1.3.0-r1.apk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport-1.3.0-r1.apk)
+- 🚀 **最新版 v1.3.1 APK**: [点击下载 luci-app-dailyreport-1.3.1-r1.apk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport-1.3.1-r1.apk)
+- 🚀 **历史版 v1.3.0 APK**: [点击下载 luci-app-dailyreport-1.3.0-r1.apk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport-1.3.0-r1.apk)
 - 🚀 **历史版 v1.2.0 APK**: [点击下载 luci-app-dailyreport-1.2.0-r1.apk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport-1.2.0-r1.apk)
 
 OpenWrt 终端一键安装：
 ```bash
-wget -O /tmp/luci-app-dailyreport.apk https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport-1.3.0-r1.apk
+wget -O /tmp/luci-app-dailyreport.apk https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport-1.3.1-r1.apk
 apk add --allow-untrusted /tmp/luci-app-dailyreport.apk
 /etc/init.d/rpcd reload
 ```
@@ -64,6 +66,14 @@ apk add --allow-untrusted /tmp/luci-app-dailyreport.apk
 3. 点击 **保存并应用**，点击 **立即生成并发送日报** 即可立即测试。
 
 ## 📝 更新日志 (Release Notes)
+
+### v1.3.1 (2026-10-19)
+* 📱 **休眠与离线设备全景追踪（防止设备漏记）**：
+  * 取消了此前大于 1KB 才记录设备的严苛过滤条件；
+  * 联合基准设备列表、实时活跃列表与 DHCP 静态分配列表，确保即使设备关机、休眠或离线（增量为 0 B），也完整呈现在报表中并标记为 `(待机/离线)`，彻底消除“设备断线后从报表消失”的困惑。
+* 🌐 **代理回环与系统出网分流差额透明化**：
+  * 新增 **【代理/路由系统分流】** 卡片，精确展示物理 WAN 吞吐与终端直连聚合之间的差额；
+  * 完美解释因 OpenClash 透明代理（127.0.0.1 重定向回环）、路由器自身更新、DNS 等产生的流量流向，报表数据 100% 严密对齐。
 
 ### v1.3.0 (2026-10-16)
 * 📶 **双轨真实流量交叉验证与对账**：
