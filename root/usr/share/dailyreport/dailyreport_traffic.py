@@ -358,7 +358,8 @@ def main():
                     ip = lease_ip
                     break
 
-        dev_name = mac_to_name.get(mac, ip_to_name.get(ip, f"设备 [{mac.upper()}]"))
+        unnamed_prefix = "Device" if lang == "en" else "设备"
+        dev_name = mac_to_name.get(mac, ip_to_name.get(ip, f"{unnamed_prefix} [{mac.upper()}]"))
         devices[mac] = {
             "name": dev_name,
             "display_ip": ip if ip.startswith("192.168.") else mac.upper(),

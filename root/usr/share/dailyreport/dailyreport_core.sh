@@ -216,13 +216,25 @@ if [ -f "$LAST_LOGIN_FILE" ]; then
 else
     NEW_LOGINS=$(cat "$CURR_LOGIN_FILE" 2>/dev/null)
 fi
-LOGIN_HTML="<span style='color:#52c41a;'>✅ 暂无新增登录</span>"
+if [ "$REPORT_LANG" = "en" ]; then
+    LOGIN_HTML="<span style='color:#52c41a;'>✅ No new logins</span>"
+else
+    LOGIN_HTML="<span style='color:#52c41a;'>✅ 暂无新增登录</span>"
+fi
 if [ -n "$NEW_LOGINS" ]; then
-    FORMATTED_LOGINS=$(echo "$NEW_LOGINS" | awk '{
-        if ($0 ~ /dropbear.*succeeded/) print "<div style=\"color:#1890ff; margin-bottom:4px;\">🔑 <b>SSH 成功：</b>" $0 "</div>";
-        else if ($0 ~ /luci.*accepted/) print "<div style=\"color:#52c41a; margin-bottom:4px;\">🌐 <b>Web 登录：</b>" $0 "</div>";
-        else print "<div style=\"color:#ffc107; margin-bottom:4px;\">🟡 <b>异常中断：</b>" $0 "</div>";
-    }')
+    if [ "$REPORT_LANG" = "en" ]; then
+        FORMATTED_LOGINS=$(echo "$NEW_LOGINS" | awk '{
+            if ($0 ~ /dropbear.*succeeded/) print "<div style=\"color:#1890ff; margin-bottom:4px;\">🔑 <b>SSH Success:</b> " $0 "</div>";
+            else if ($0 ~ /luci.*accepted/) print "<div style=\"color:#52c41a; margin-bottom:4px;\">🌐 <b>Web Login:</b> " $0 "</div>";
+            else print "<div style=\"color:#ffc107; margin-bottom:4px;\">🟡 <b>Abnormal:</b> " $0 "</div>";
+        }')
+    else
+        FORMATTED_LOGINS=$(echo "$NEW_LOGINS" | awk '{
+            if ($0 ~ /dropbear.*succeeded/) print "<div style=\"color:#1890ff; margin-bottom:4px;\">🔑 <b>SSH 成功：</b>" $0 "</div>";
+            else if ($0 ~ /luci.*accepted/) print "<div style=\"color:#52c41a; margin-bottom:4px;\">🌐 <b>Web 登录：</b>" $0 "</div>";
+            else print "<div style=\"color:#ffc107; margin-bottom:4px;\">🟡 <b>异常中断：</b>" $0 "</div>";
+        }')
+    fi
     LOGIN_HTML="<div style='background:#f8f9fa; border:1px solid #dee2e6; border-radius:6px; padding:12px; font-family:monospace; font-size:12px;'>$FORMATTED_LOGINS</div>"
 fi
 
@@ -248,14 +260,28 @@ if [ "$ENABLE_BANIP" = "1" ]; then
 
     BANIP_PART=""
     if [ -n "$NEW_BANIP" ]; then
-        BANIP_ROWS=$(echo "$NEW_BANIP" | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | sort | uniq -c | sort -nr | sed 's/^[[:space:]]*//; s/[[:space:]]/ 次 | IP: /')
+        if [ "$REPORT_LANG" = "en" ]; then
+            BANIP_ROWS=$(echo "$NEW_BANIP" | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | sort | uniq -c | sort -nr | sed 's/^[[:space:]]*//; s/[[:space:]]/ times | IP: /')
+        else
+            BANIP_ROWS=$(echo "$NEW_BANIP" | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | sort | uniq -c | sort -nr | sed 's/^[[:space:]]*//; s/[[:space:]]/ 次 | IP: /')
+        fi
         BANIP_COUNT=$(echo "$NEW_BANIP" | grep -c -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$')
         if [ "$BANIP_COUNT" -gt 0 ] && [ -n "$BANIP_ROWS" ]; then
-            BANIP_PART="<div style='margin-bottom:12px;'><div style='font-size:13px;font-weight:600;color:#cf1322;margin-bottom:6px;'>🛡️ 被 banIP 拦截 (今日新增 ${BANIP_COUNT} 个恶意 IP)：</div><pre style='background:#fff1f0;border:1px solid #ffa39e;border-radius:6px;padding:10px;font-family:monospace;font-size:12px;color:#cf1322;margin:0;'>$BANIP_ROWS</pre></div>"
+            if [ "$REPORT_LANG" = "en" ]; then
+                BANIP_PART="<div style='margin-bottom:12px;'><div style='font-size:13px;font-weight:600;color:#cf1322;margin-bottom:6px;'>🛡️ Blocked by banIP (${BANIP_COUNT} new malicious IPs today):</div><pre style='background:#fff1f0;border:1px solid #ffa39e;border-radius:6px;padding:10px;font-family:monospace;font-size:12px;color:#cf1322;margin:0;'>$BANIP_ROWS</pre></div>"
+            else
+                BANIP_PART="<div style='margin-bottom:12px;'><div style='font-size:13px;font-weight:600;color:#cf1322;margin-bottom:6px;'>🛡️ 被 banIP 拦截 (今日新增 ${BANIP_COUNT} 个恶意 IP)：</div><pre style='background:#fff1f0;border:1px solid #ffa39e;border-radius:6px;padding:10px;font-family:monospace;font-size:12px;color:#cf1322;margin:0;'>$BANIP_ROWS</pre></div>"
+            fi
             echo "[SECURITY AUDIT] 成功捕获今日 banIP 新增封禁: $BANIP_COUNT 个"
         fi
     fi
-    [ -z "$BANIP_PART" ] && BANIP_PART="<div style='margin-bottom:12px;font-size:13px;color:#52c41a;'>🛡️ banIP 拦截：✅ 今日暂无新增封禁</div>"
+    if [ -z "$BANIP_PART" ]; then
+        if [ "$REPORT_LANG" = "en" ]; then
+            BANIP_PART="<div style='margin-bottom:12px;font-size:13px;color:#52c41a;'>🛡️ banIP Interceptions: ✅ No new blocked IPs today</div>"
+        else
+            BANIP_PART="<div style='margin-bottom:12px;font-size:13px;color:#52c41a;'>🛡️ banIP 拦截：✅ 今日暂无新增封禁</div>"
+        fi
+    fi
 
     # 4.2 进了防火墙黑名单的恶意扫描 (nftables / NAS-Port-Ban 动态防御)
     logread | grep -E 'NAS-Port-Ban' > "$CURR_NFT_FILE"
@@ -266,15 +292,29 @@ if [ "$ENABLE_BANIP" = "1" ]; then
     fi
     NFT_PART=""
     if [ -n "$NEW_NFT" ]; then
-        NFT_ROWS=$(echo "$NEW_NFT" | sed -n 's/.*SRC=\([^ ]*\).*/\1/p' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | sort | uniq -c | sort -nr | sed 's/^[[:space:]]*//; s/[[:space:]]/ 次 | 恶意源: /')
+        if [ "$REPORT_LANG" = "en" ]; then
+            NFT_ROWS=$(echo "$NEW_NFT" | sed -n 's/.*SRC=\([^ ]*\).*/\1/p' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | sort | uniq -c | sort -nr | sed 's/^[[:space:]]*//; s/[[:space:]]/ times | Source: /')
+        else
+            NFT_ROWS=$(echo "$NEW_NFT" | sed -n 's/.*SRC=\([^ ]*\).*/\1/p' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | sort | uniq -c | sort -nr | sed 's/^[[:space:]]*//; s/[[:space:]]/ 次 | 恶意源: /')
+        fi
         NFT_COUNT=$(echo "$NEW_NFT" | grep -c 'NAS-Port-Ban')
         if [ "$NFT_COUNT" -gt 0 ] && [ -n "$NFT_ROWS" ]; then
-            NFT_PART="<div><div style='font-size:13px;font-weight:600;color:#d4380d;margin-bottom:6px;'>🚫 进防火墙黑名单/端口防扫 (今日新增 ${NFT_COUNT} 次拦截)：</div><pre style='background:#fff2e8;border:1px solid #ffbb96;border-radius:6px;padding:10px;font-family:monospace;font-size:12px;color:#d4380d;margin:0;'>$NFT_ROWS</pre></div>"
+            if [ "$REPORT_LANG" = "en" ]; then
+                NFT_PART="<div><div style='font-size:13px;font-weight:600;color:#d4380d;margin-bottom:6px;'>🚫 Firewall Port Scan Blacklist (${NFT_COUNT} new blocks today):</div><pre style='background:#fff2e8;border:1px solid #ffbb96;border-radius:6px;padding:10px;font-family:monospace;font-size:12px;color:#d4380d;margin:0;'>$NFT_ROWS</pre></div>"
+            else
+                NFT_PART="<div><div style='font-size:13px;font-weight:600;color:#d4380d;margin-bottom:6px;'>🚫 进防火墙黑名单/端口防扫 (今日新增 ${NFT_COUNT} 次拦截)：</div><pre style='background:#fff2e8;border:1px solid #ffbb96;border-radius:6px;padding:10px;font-family:monospace;font-size:12px;color:#d4380d;margin:0;'>$NFT_ROWS</pre></div>"
+            fi
             BAN_SUMMARY="拦截: 发现新增恶意扫描"
             echo "[SECURITY AUDIT] 成功捕获今日防火墙黑名单新增扫描: $NFT_COUNT 次"
         fi
     fi
-    [ -z "$NFT_PART" ] && NFT_PART="<div style='font-size:13px;color:#52c41a;'>🚫 防火墙黑名单：✅ 今日暂无新增入侵探测</div>"
+    if [ -z "$NFT_PART" ]; then
+        if [ "$REPORT_LANG" = "en" ]; then
+            NFT_PART="<div style='font-size:13px;color:#52c41a;'>🚫 Firewall Blacklist: ✅ No new intrusion probes today</div>"
+        else
+            NFT_PART="<div style='font-size:13px;color:#52c41a;'>🚫 防火墙黑名单：✅ 今日暂无新增入侵探测</div>"
+        fi
+    fi
 
     BAN_IP_HTML="<div style='padding:5px;'>${BANIP_PART}${NFT_PART}</div>"
 fi

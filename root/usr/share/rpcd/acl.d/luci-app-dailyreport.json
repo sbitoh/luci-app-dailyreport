@@ -6,6 +6,9 @@
 			"file": {
 				"/usr/share/dailyreport/dailyreport_core.sh test": [ "exec" ]
 			},
+			"ubus": {
+				"luci": [ "setInitAction" ]
+			},
 			"uci": [ "dailyreport" ]
 		},
 		"write": {

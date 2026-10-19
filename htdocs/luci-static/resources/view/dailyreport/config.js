@@ -3,14 +3,25 @@
 'require form';
 'require fs';
 'require ui';
+'require uci';
 
 return view.extend({
-	render: function() {
+	load: function() {
+		return Promise.all([
+			uci.load('dailyreport')
+		]);
+	},
+	handleSaveApply: function(ev, mode) {
+		return this.handleSave(ev).then(function() {
+			window.location.reload();
+		});
+	},
+	render: function(data) {
 		var m, s, o;
 
-		// 1. 国际化映射：优先中文，英文环境自动回退英文
-		var isZh = (L.env && (L.env.lang == 'zh_cn' || L.env.lang == 'zh-cn' || L.env.lang == 'zh_Hans')) || 
-		           (navigator.language && navigator.language.toLowerCase().indexOf('zh') !== -1);
+		// 1. 动态读取当前配置的语言 (从官方 uci 对象中直接获取，彻底可靠)
+		var currentLang = uci.get('dailyreport', 'config', 'lang') || 'zh_cn';
+		var isZh = (currentLang === 'zh_cn');
 
 		var tr = function(zh, en) {
 			return isZh ? zh : en;
@@ -27,6 +38,7 @@ return view.extend({
 		o.value('en', 'English (英文)');
 		o.default = 'zh_cn';
 		o.rmempty = false;
+		o.description = tr('修改语言后，点击底部的【保存并应用】，页面将自动切换语言。', 'After changing language, click [Save & Apply] at the bottom to reload in English.');
 
 		o = s.option(form.Flag, 'enabled', tr('启用日报服务', 'Enable Daily Report Service'));
 		o.rmempty = false;
