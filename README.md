@@ -112,6 +112,17 @@ apk add --allow-untrusted /tmp/luci-app-dailyreport.apk
 
 ## 📝 更新日志 (Release Notes)
 
+### v1.3.2 (2026-10-19)
+* 🚀 **Kernel-Level Target IP Accounting (Zero Lost Connection Bytes)**:
+  - Completely re-architected traffic collection engine, abandoning fragile `/proc/net/nf_conntrack` polling;
+  - Integrated with Linux kernel `nftables` dynamic counter sets (`target_ip_rx` / `target_ip_tx`), preserving 100% of bytes even after connections close;
+  - Fully compatible with OpenClash / Fake-IP proxy setups, resolving real domain names via local DNS query cache;
+  - Introduced `target_ip_base.json` for atomic midnight snapshots to accurately account for daily net increments.
+* 📱 **Hardware Attribution & Inactive Device Filtering**:
+  - Eliminated separate proxy cards; all WAN physical throughput is 100% attributed directly to concrete hardware devices;
+  - Unnamed clients cleanly labeled as `设备 [MAC]` with `IP / MAC` header;
+  - Hidden idle (0-byte) devices from the report table to keep reports clean and readable.
+
 ### v1.3.1 (2026-10-19)
 * 📱 **休眠与离线设备全景追踪（防止设备漏记）**：
   * 取消了此前大于 1KB 才记录设备的严苛过滤条件；
