@@ -1,7 +1,7 @@
 include $(TOPDIR)/rules.mk
 
 LUCI_TITLE:=LuCI support for Daily Status & Traffic Report
-LUCI_DEPENDS:=+python3 +curl
+LUCI_DEPENDS:=+python3 +curl +nlbwmon
 LUCI_PKGARCH:=all
 
 PKG_NAME:=luci-app-dailyreport

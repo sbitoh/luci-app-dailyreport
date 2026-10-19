@@ -32,6 +32,21 @@ restore_snapshot() {
     fi
 }
 
+init_nftables_tracker() {
+    # 检查并自动创建内核级动态目标 IP 记账集合
+    command -v nft >/dev/null 2>&1 || return 0
+    if ! nft list table inet dailyreport_tracker >/dev/null 2>&1; then
+        nft add table inet dailyreport_tracker 2>/dev/null || true
+        nft 'add set inet dailyreport_tracker private_ips { type ipv4_addr; flags interval; elements = { 10.0.0.0/8, 127.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 224.0.0.0/4, 255.255.255.255 }; }' 2>/dev/null || true
+        nft 'add set inet dailyreport_tracker target_ip_rx { type ipv4_addr; size 65535; flags dynamic; counter; }' 2>/dev/null || true
+        nft 'add set inet dailyreport_tracker target_ip_tx { type ipv4_addr; size 65535; flags dynamic; counter; }' 2>/dev/null || true
+        nft add chain inet dailyreport_tracker upload_track '{ type filter hook prerouting priority -150; policy accept; }' 2>/dev/null || true
+        nft add chain inet dailyreport_tracker download_track '{ type filter hook postrouting priority 150; policy accept; }' 2>/dev/null || true
+        nft add rule inet dailyreport_tracker upload_track 'iifname "br-lan" ip daddr != @private_ips update @target_ip_tx { ip daddr }' 2>/dev/null || true
+        nft add rule inet dailyreport_tracker download_track 'oifname "br-lan" ip saddr != @private_ips update @target_ip_rx { ip saddr }' 2>/dev/null || true
+    fi
+}
+
 start_service() {
 	local enabled send_hour
 	config_load dailyreport
@@ -47,6 +62,9 @@ start_service() {
 
 	# 2. 恢复开机前的持久化快照
 	restore_snapshot
+
+	# 3. 自动检查并初始化内核级动态记账集合 (nftables dailyreport_tracker)
+	init_nftables_tracker
 
 	# 2. 清理旧的 crontab 任务
 	sed -i '/dailyreport_core.sh/d' "$CRON_FILE" 2>/dev/null

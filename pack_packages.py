@@ -13,7 +13,7 @@ deb_binary = b'2.0\n'
 
 control_content = f'''Package: luci-app-dailyreport
 Version: {version}-{release}
-Depends: python3, curl
+Depends: python3, curl, nlbwmon
 Section: luci
 Architecture: all
 Maintainer: OpenWrt Community
@@ -28,6 +28,7 @@ postinst_content = '''#!/bin/sh
 	/etc/init.d/rpcd reload 2>/dev/null || /etc/init.d/rpcd restart 2>/dev/null
 	/etc/init.d/dailyreport enable 2>/dev/null || true
 	/etc/init.d/dailyreport start 2>/dev/null || true
+	/etc/init.d/dailyreport reload 2>/dev/null || true
 	rm -rf /tmp/luci-indexcache* /tmp/luci-modulecache*
 	exit 0
 }
