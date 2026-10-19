@@ -72,7 +72,8 @@
 根据你固件所使用的包管理器选择对应格式：
 
 #### 传统 `opkg` 环境 (OpenWrt 24.10, 23.05 及历史固件)
-- 📦 **最新版 v1.3.1**: [点击下载 luci-app-dailyreport_1.3.1-1_all.ipk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.3.1-1_all.ipk)
+- 📦 **最新版 v1.3.2**: [点击下载 luci-app-dailyreport_1.3.2-1_all.ipk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.3.2-1_all.ipk)
+- 📦 **历史版 v1.3.1**: [点击下载 luci-app-dailyreport_1.3.1-1_all.ipk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.3.1-1_all.ipk)
 - 📦 **历史版 v1.3.0**: [点击下载 luci-app-dailyreport_1.3.0-1_all.ipk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.3.0-1_all.ipk)
 - 📦 **历史版 v1.2.0**: [点击下载 luci-app-dailyreport_1.2.0-1_all.ipk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.2.0-1_all.ipk)
 - 📦 **历史版 v1.1.0**: [点击下载 luci-app-dailyreport_1.1.0-1_all.ipk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.1.0-1_all.ipk)
@@ -80,19 +81,20 @@
 
 OpenWrt 终端一键安装：
 ```bash
-wget -O /tmp/luci-app-dailyreport.ipk https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.3.1-1_all.ipk
+wget -O /tmp/luci-app-dailyreport.ipk https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.3.2-1_all.ipk
 opkg install /tmp/luci-app-dailyreport.ipk
 /etc/init.d/rpcd reload
 ```
 
 #### 新版 `apk` (APK v3) 环境 (OpenWrt SNAPSHOT / 主线开发版)
-- 🚀 **最新版 v1.3.1 APK**: [点击下载 luci-app-dailyreport-1.3.1-r1.apk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport-1.3.1-r1.apk)
+- 🚀 **最新版 v1.3.2 APK**: [点击下载 luci-app-dailyreport-1.3.2-r1.apk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport-1.3.2-r1.apk)
+- 🚀 **历史版 v1.3.1 APK**: [点击下载 luci-app-dailyreport-1.3.1-r1.apk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport-1.3.1-r1.apk)
 - 🚀 **历史版 v1.3.0 APK**: [点击下载 luci-app-dailyreport-1.3.0-r1.apk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport-1.3.0-r1.apk)
 - 🚀 **历史版 v1.2.0 APK**: [点击下载 luci-app-dailyreport-1.2.0-r1.apk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport-1.2.0-r1.apk)
 
 OpenWrt 终端一键安装：
 ```bash
-wget -O /tmp/luci-app-dailyreport.apk https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport-1.3.1-r1.apk
+wget -O /tmp/luci-app-dailyreport.apk https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport-1.3.2-r1.apk
 apk add --allow-untrusted /tmp/luci-app-dailyreport.apk
 /etc/init.d/rpcd reload
 ```
@@ -113,15 +115,15 @@ apk add --allow-untrusted /tmp/luci-app-dailyreport.apk
 ## 📝 更新日志 (Release Notes)
 
 ### v1.3.2 (2026-10-19)
-* 🚀 **Kernel-Level Target IP Accounting (Zero Lost Connection Bytes)**:
-  - Completely re-architected traffic collection engine, abandoning fragile `/proc/net/nf_conntrack` polling;
-  - Integrated with Linux kernel `nftables` dynamic counter sets (`target_ip_rx` / `target_ip_tx`), preserving 100% of bytes even after connections close;
-  - Fully compatible with OpenClash / Fake-IP proxy setups, resolving real domain names via local DNS query cache;
-  - Introduced `target_ip_base.json` for atomic midnight snapshots to accurately account for daily net increments.
-* 📱 **Hardware Attribution & Inactive Device Filtering**:
-  - Eliminated separate proxy cards; all WAN physical throughput is 100% attributed directly to concrete hardware devices;
-  - Unnamed clients cleanly labeled as `设备 [MAC]` with `IP / MAC` header;
-  - Hidden idle (0-byte) devices from the report table to keep reports clean and readable.
+* 🚀 **全新内核级目标 IP 动态记账（杜绝短连接断开后流量蒸发）**：
+  - 彻底重构底层网站与外网连接采集引擎，弃用易丢数据的 `/proc/net/nf_conntrack` 抽样轮询；
+  - 接入 Linux 内核 `nftables` 动态计数器集合（`target_ip_rx` / `target_ip_tx`），不论大文件下载还是短连接传输，在连接关闭释放后仍 100% 永久留存字节数；
+  - 深度兼容 OpenClash / 透明代理环境，完美捕捉 Fake-IP 真实吞吐，结合本地 DNS 解析日志精准还原回真实网站域名；
+  - 引入 `target_ip_base.json` 每日 0 点起跑线基准，确保只统计当日真实净增量，与 WAN 物理总吞吐在同一数量级上严密对齐。
+* 📱 **物理硬件设备精准归属与静默设备净化**：
+  - 取消独立的“代理/系统分流”外挂卡片，所有公网总吞吐 100% 穿透落实到具体的物理终端硬件名下；
+  - 未命名的局域网设备统一采用 `设备 [MAC]` 规范标识，表头统一为 `IP / MAC`；
+  - 报表智能过滤统计周期内无流量（0 B）的静默/空闲设备，极大提升报表阅读体验。
 
 ### v1.3.1 (2026-10-19)
 * 📱 **休眠与离线设备全景追踪（防止设备漏记）**：
