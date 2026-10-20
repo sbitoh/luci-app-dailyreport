@@ -148,6 +148,22 @@ def read_wan_bytes(ifname):
         pass
     return 0, 0
 
+def safe_atomic_json_dump(data, target_path):
+    """安全原子写入 JSON 文件，杜绝大并发或中断导致的文件损坏与数据重叠"""
+    tmp_path = f"{target_path}.tmp"
+    try:
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(data, f)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_path, target_path)
+    except Exception:
+        if os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except Exception:
+                pass
+
 def collect_nlbw_cur_raw():
     """从 nlbwmon 提取当前所有设备的外网业务累计 (基于物理 MAC 聚合 IPv4/IPv6 及 Clash 代理流量)"""
     nlbw_cur_raw = {}
@@ -248,17 +264,16 @@ def main():
             os.makedirs(persist_dir, exist_ok=True)
             # 1. 采集并保存各终端当前起跑线底数
             cur_nlbw = collect_nlbw_cur_raw()
-            with open(nlbw_base_file, "w", encoding="utf-8") as bf:
-                json.dump(cur_nlbw, bf)
+            safe_atomic_json_dump(cur_nlbw, nlbw_base_file)
+
             # 2. 采集并保存目标 IP 流量起跑线底数
             cur_ips = collect_target_ip_cur_raw()
-            with open(f"{persist_dir}/target_ip_base.json", "w", encoding="utf-8") as tibf:
-                json.dump(cur_ips, tibf)
+            safe_atomic_json_dump(cur_ips, f"{persist_dir}/target_ip_base.json")
+
             # 3. 采集并保存物理 WAN 网口起跑线底数
             wan_if = get_wan_interface()
             wrx, wtx = read_wan_bytes(wan_if)
-            with open(wan_base_file, "w", encoding="utf-8") as wf:
-                json.dump({"ifname": wan_if, "rx": wrx, "tx": wtx}, wf)
+            safe_atomic_json_dump({"ifname": wan_if, "rx": wrx, "tx": wtx}, wan_base_file)
         except Exception:
             pass
         return
