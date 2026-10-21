@@ -55,7 +55,11 @@ start_service() {
 
 	# 1. 自动尝试安装并启用 nlbwmon 探针 (如果系统尚未安装)
 	if ! command -v nlbwmon >/dev/null 2>&1; then
-		opkg install --nodeps nlbwmon 2>/dev/null || opkg install nlbwmon 2>/dev/null || true
+		if command -v apk >/dev/null 2>&1; then
+			apk add nlbwmon 2>/dev/null || true
+		elif command -v opkg >/dev/null 2>&1; then
+			opkg install --nodeps nlbwmon 2>/dev/null || opkg install nlbwmon 2>/dev/null || true
+		fi
 		/etc/init.d/nlbwmon enable 2>/dev/null || true
 		/etc/init.d/nlbwmon start 2>/dev/null || true
 	fi
