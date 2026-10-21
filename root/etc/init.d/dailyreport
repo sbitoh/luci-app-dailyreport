@@ -77,8 +77,8 @@ start_service() {
 		echo "0 $send_hour * * * $SCRIPT auto" >> "$CRON_FILE"
 		# 2. 每 5 分钟轻量级巡检一次硬件温度（超温时立即发邮件与 Gotify 告警，并视情况关机）
 		echo "*/5 * * * * $SCRIPT check_temp" >> "$CRON_FILE"
-		# 3. 每 2 小时整点轻量刷盘一次快照（保护 Flash 寿命的同时，防止意外断电丢失当天统计）
-		echo "0 */2 * * * $SCRIPT save_snapshot" >> "$CRON_FILE"
+		# 3. 每小时整点轻量刷盘一次快照（滑动时间窗口，精准保留48小时数据）
+		echo "0 * * * * $SCRIPT save_snapshot" >> "$CRON_FILE"
 		/etc/init.d/cron reload 2>/dev/null || /etc/init.d/cron restart 2>/dev/null
 	fi
 }

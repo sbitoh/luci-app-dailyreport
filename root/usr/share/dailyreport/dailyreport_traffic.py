@@ -9,6 +9,7 @@ import json
 import subprocess
 import os
 import sys
+import time
 
 def fmt_bytes(b):
     try:
@@ -164,6 +165,81 @@ def safe_atomic_json_dump(data, target_path):
             except Exception:
                 pass
 
+def load_window(snapshots_dir, margin=6 * 3600):
+    """发信用：找离「现在往前 24 小时」最近的快照。不够 24 小时就用最老的快照降级，标注实际跨度。"""
+    now_ts = int(time.time())
+    target_ts = now_ts - 24 * 3600
+    best = None          # 最接近24小时前的快照
+    oldest = None        # 最老的快照（降级用）
+    best_diff = None
+
+    if os.path.isdir(snapshots_dir):
+        for fname in os.listdir(snapshots_dir):
+            if not (fname.startswith("snap_") and fname.endswith(".json")):
+                continue
+            try:
+                file_ts = int(fname[5:-5])
+            except Exception:
+                continue
+            try:
+                with open(f"{snapshots_dir}/{fname}", "r", encoding="utf-8") as sf:
+                    payload = json.load(sf)
+            except Exception:
+                continue
+            if not isinstance(payload, dict) or "nlbw" not in payload:
+                continue
+            payload.setdefault("ts", file_ts)
+
+            diff = abs(file_ts - target_ts)
+            if best_diff is None or diff < best_diff:
+                best = payload
+                best_diff = diff
+
+            if oldest is None or file_ts < oldest["ts"]:
+                oldest = payload
+
+    # 有满足 24h 窗口的快照
+    if best and best_diff is not None and best_diff <= margin:
+        since = best.get("time_str") or time.strftime("%m-%d %H:%M", time.localtime(best["ts"]))
+        return {
+            "ready": True,
+            "nlbw": best.get("nlbw") or {},
+            "wan": best.get("wan") or {},
+            "target_ips": best.get("target_ips") or {},
+            "label": "过去24小时",
+            "note": f"统计区间：{since} 至现在",
+            "since": since,
+        }
+
+    # 降级：用最老的快照，标注实际跨度
+    if oldest:
+        elapsed_min = max(1, (now_ts - oldest["ts"]) // 60)
+        if elapsed_min >= 60:
+            span_str = f"约{elapsed_min // 60}小时{elapsed_min % 60}分钟"
+        else:
+            span_str = f"约{elapsed_min}分钟"
+        since = oldest.get("time_str") or time.strftime("%m-%d %H:%M", time.localtime(oldest["ts"]))
+        return {
+            "ready": True,
+            "nlbw": oldest.get("nlbw") or {},
+            "wan": oldest.get("wan") or {},
+            "target_ips": oldest.get("target_ips") or {},
+            "label": f"过去{span_str}（快照积累中，满24小时后对齐）",
+            "note": f"统计区间：{since} 至现在（快照尚不足24小时，数据仅供参考）",
+            "since": since,
+        }
+
+    # 完全没有快照
+    return {
+        "ready": False,
+        "nlbw": {},
+        "wan": {},
+        "target_ips": {},
+        "label": "过去24小时",
+        "note": "暂无快照数据，首次快照将在整点写入。",
+        "since": "",
+    }
+
 def collect_nlbw_cur_raw():
     """从 nlbwmon 提取当前所有设备的外网业务累计 (基于物理 MAC 聚合 IPv4/IPv6 及 Clash 代理流量)"""
     nlbw_cur_raw = {}
@@ -254,29 +330,50 @@ def main():
             lang = "en"
 
     persist_dir = "/etc/dailyreport/data"
+    snapshots_dir = f"{persist_dir}/snapshots"
     nlbw_base_file = f"{persist_dir}/nlbw_base.json"
     wan_base_file = f"{persist_dir}/wan_base.json"
     l7_base_file = f"{persist_dir}/l7_base.json"
 
-    # 处理 0 点原子级基准重置参数 (--reset-base)
-    if "--reset-base" in sys.argv:
+    # 处理快照：只追加带时间戳的记录，不改日报用的底数。发信和测试都不走这里。
+    if "--save-snapshot" in sys.argv or "--reset-base" in sys.argv:
         try:
-            os.makedirs(persist_dir, exist_ok=True)
-            # 1. 采集并保存各终端当前起跑线底数
-            cur_nlbw = collect_nlbw_cur_raw()
-            safe_atomic_json_dump(cur_nlbw, nlbw_base_file)
-
-            # 2. 采集并保存目标 IP 流量起跑线底数
-            cur_ips = collect_target_ip_cur_raw()
-            safe_atomic_json_dump(cur_ips, f"{persist_dir}/target_ip_base.json")
-
-            # 3. 采集并保存物理 WAN 网口起跑线底数
-            wan_if = get_wan_interface()
+            os.makedirs(snapshots_dir, exist_ok=True)
+            now_ts = int(time.time())
+            snap_payload = {
+                "ts": now_ts,
+                "time_str": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(now_ts)),
+                "wan": {"ifname": get_wan_interface(), "rx": read_wan_bytes(get_wan_interface())[0], "tx": read_wan_bytes(get_wan_interface())[1]},
+                "nlbw": collect_nlbw_cur_raw(),
+                "target_ips": collect_target_ip_cur_raw(),
+            }
+            wan_if = snap_payload["wan"]["ifname"]
             wrx, wtx = read_wan_bytes(wan_if)
-            safe_atomic_json_dump({"ifname": wan_if, "rx": wrx, "tx": wtx}, wan_base_file)
+            snap_payload["wan"] = {"ifname": wan_if, "rx": wrx, "tx": wtx}
+            safe_atomic_json_dump(snap_payload, f"{snapshots_dir}/snap_{now_ts}.json")
+            cutoff_ts = now_ts - (48 * 3600)
+            for fname in os.listdir(snapshots_dir):
+                if not (fname.startswith("snap_") and fname.endswith(".json")):
+                    continue
+                try:
+                    file_ts = int(fname[5:-5])
+                except Exception:
+                    continue
+                if file_ts < cutoff_ts:
+                    try:
+                        os.remove(f"{snapshots_dir}/{fname}")
+                    except Exception:
+                        pass
         except Exception:
             pass
         return
+
+    window = load_window(snapshots_dir)
+    base_data = window["nlbw"]
+    wan_base_data = window["wan"]
+    base_ips = window["target_ips"]
+    window_label = window["label"]
+    window_note = window["note"]
 
     enable_traffic = get_uci_option("dailyreport", "config", "enable_traffic", "1") == "1"
     enable_sites = get_uci_option("dailyreport", "config", "enable_sites", "1") == "1"
@@ -334,28 +431,18 @@ def main():
         except Exception:
             pass
 
-    # 2. 从 nlbwmon 提取各设备真实外网增量
+    # 2. 设备增量 = 现在的累计 - 24小时前那一笔。窗口没齐就不出数。
     devices = {}
-    nlbw_cur_raw = collect_nlbw_cur_raw() if enable_traffic else {}
+    window_ready = bool(window.get("ready"))
+    nlbw_cur_raw = collect_nlbw_cur_raw() if (enable_traffic and window_ready) else {}
 
-    base_data = {}
-    if os.path.exists(nlbw_base_file):
-        try:
-            with open(nlbw_base_file, "r", encoding="utf-8") as bf:
-                base_data = json.load(bf)
-        except Exception:
-            pass
-    else:
-        try:
-            os.makedirs(persist_dir, exist_ok=True)
-            with open(nlbw_base_file, "w", encoding="utf-8") as bf:
-                json.dump(nlbw_cur_raw, bf)
-            base_data = nlbw_cur_raw
-        except Exception:
-            pass
+    if not window_ready:
+        base_data = {}
+        wan_base_data = {}
+        base_ips = {}
 
     # 联合所有已知 MAC：包含基准里的历史活跃设备、当前有流量设备以及 DHCP 静态绑定设备
-    all_tracked_macs = set(base_data.keys()) | set(nlbw_cur_raw.keys()) | set(mac_to_name.keys())
+    all_tracked_macs = set(base_data.keys()) | set(nlbw_cur_raw.keys()) | set(mac_to_name.keys()) if window_ready else set()
 
     # 计算今日各终端纯净增量 (不遗漏待机、睡眠或离线设备)
     for mac in all_tracked_macs:
@@ -387,28 +474,13 @@ def main():
     dev_total_rx = sum(d["wan_rx"] for d in devices.values())
     dev_total_tx = sum(d["wan_tx"] for d in devices.values())
 
-    # 轨 B：物理 WAN 网口独立增量 (pppoe-wan 真实底层计数器)
+    # 轨 B：物理 WAN = 现在的口计数 - 同一笔快照里的口计数。窗口没齐就为 0。
     wan_if = get_wan_interface()
     cur_wrx, cur_wtx = read_wan_bytes(wan_if)
 
-    wan_base_data = {}
-    if os.path.exists(wan_base_file):
-        try:
-            with open(wan_base_file, "r", encoding="utf-8") as wf:
-                wan_base_data = json.load(wf)
-        except Exception:
-            pass
-
-    if not wan_base_data:
-        # 首次或尚未建立 0 点基准时，保存当前为起跑线
-        try:
-            os.makedirs(persist_dir, exist_ok=True)
-            with open(wan_base_file, "w", encoding="utf-8") as wf:
-                json.dump({"ifname": wan_if, "rx": cur_wrx, "tx": cur_wtx}, wf)
-        except Exception:
-            pass
-        wan_phy_rx = dev_total_rx
-        wan_phy_tx = dev_total_tx
+    if not window_ready or not wan_base_data:
+        wan_phy_rx = 0
+        wan_phy_tx = 0
     else:
         b_wrx = wan_base_data.get("rx", 0)
         b_wtx = wan_base_data.get("tx", 0)
@@ -485,16 +557,10 @@ def main():
             except Exception:
                 pass
 
-        # 获取当前目标 IP 流量
-        cur_ips = collect_target_ip_cur_raw()
-        target_ip_base_file = f"{persist_dir}/target_ip_base.json"
-        base_ips = {}
-        if os.path.exists(target_ip_base_file):
-            try:
-                with open(target_ip_base_file, "r", encoding="utf-8") as tibf:
-                    base_ips = json.load(tibf)
-            except Exception:
-                base_ips = {}
+        # 网站/IP 与设备、总流量用同一笔 24 小时前快照。窗口没齐就不出。
+        cur_ips = collect_target_ip_cur_raw() if window_ready else {}
+        if not window_ready:
+            base_ips = {}
 
         # 聚合按域名/目标 IP 计算今日净增量
         sites_delta = {}
@@ -598,7 +664,7 @@ def main():
         th_site_rx = "Download"
         th_site_tx = "Upload"
     else:
-        title_summary = "📶 今日全网外网流量总览"
+        title_summary = f"📶 过去24小时外网流量总览"
         lbl_rx = "⬇️ 公网下载"
         lbl_tx = "⬆️ 公网上传"
         lbl_tot = "🔄 公网总吞吐"

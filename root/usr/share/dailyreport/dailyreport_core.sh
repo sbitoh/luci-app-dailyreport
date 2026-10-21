@@ -42,12 +42,11 @@ fi
 TEMP_RAW=$(cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null || echo 0)
 TEMP_C=$((TEMP_RAW / 1000))
 
-# 持久化刷盘动作 (save_snapshot)
+# 持久化刷盘动作 (save_snapshot)：写入带时间戳的快照，保留 48 小时，供发信用
 if [ "$1" = "save_snapshot" ]; then
-    mkdir -p "$PERSIST_DIR" 2>/dev/null
+    mkdir -p "$PERSIST_DIR/snapshots" 2>/dev/null
     command -v nlbw >/dev/null 2>&1 && nlbw -c commit >/dev/null 2>&1
-    [ -f "/root/site_traffic.csv" ] && cp -f "/root/site_traffic.csv" "$PERSIST_DIR/site_traffic.csv" 2>/dev/null
-    [ -f "/root/dns_cache.log" ] && cp -f "/root/dns_cache.log" "$PERSIST_DIR/dns_cache.log" 2>/dev/null
+    [ -f /usr/share/dailyreport/dailyreport_traffic.py ] && python3 /usr/share/dailyreport/dailyreport_traffic.py --save-snapshot >/dev/null 2>&1 || true
     exit 0
 fi
 
@@ -88,82 +87,50 @@ WAN_IP=$(ifconfig pppoe-wan 2>/dev/null | grep 'inet ' | awk '{print $2}' | cut 
 [ -z "$WAN_IP" ] && WAN_IP=$(curl -s -m 2 http://ifconfig.me 2>/dev/null)
 [ -z "$WAN_IP" ] && WAN_IP="获取失败"
 
-# 1. 采集在线设备 (整合 ARP 活跃邻居与 DHCP 租约，并从静态绑定解析友好名称)
+# 1. 采集在线设备：ping 所有已知 LAN 设备，有响应才算在线
 ONLINE_DEVS_TMP="/tmp/dailyreport_online_devs.txt"
 python3 - << 'PYEOF' > "$ONLINE_DEVS_TMP" 2>/dev/null
 import subprocess, os
 
-mac_to_name = {}
-ip_to_name = {}
-
-# 1. 读取 UCI 静态分配
+# 读取 UCI 静态绑定
+known = {}  # ip -> name
 try:
     out = subprocess.check_output(["uci", "show", "dhcp"], text=True)
     names, ips, macs = {}, {}, {}
     for line in out.splitlines():
         if ".name=" in line:
-            sec = line.split(".")[1].split("=")[0]
-            val = line.split("=")[1].strip("'\"")
-            names[sec] = val
+            sec = line.split(".")[1].split("=")[0]; val = line.split("=",1)[1].strip("'\"\n"); names[sec] = val
         elif ".ip=" in line:
-            sec = line.split(".")[1].split("=")[0]
-            val = line.split("=")[1].strip("'\"")
-            ips[sec] = val
+            sec = line.split(".")[1].split("=")[0]; val = line.split("=",1)[1].strip("'\"\n"); ips[sec] = val
         elif ".mac=" in line:
-            sec = line.split(".")[1].split("=")[0]
-            val = line.split("=")[1].strip("'\"")
-            macs[sec] = val
+            sec = line.split(".")[1].split("=")[0]; val = line.split("=",1)[1].strip("'\"\n"); macs[sec] = val
     for sec, name in names.items():
-        if sec in macs:
-            for m in macs[sec].split():
-                mac_to_name[m.lower()] = name
         if sec in ips:
-            ip_to_name[ips[sec]] = name
+            known[ips[sec]] = name
 except Exception:
     pass
 
-# 2. 读取 /tmp/dhcp.leases 补充动态租约
-dhcp_leases = {}
+# 读取 DHCP 动态租约补充
 if os.path.exists("/tmp/dhcp.leases"):
     try:
         with open("/tmp/dhcp.leases", "r", encoding="utf-8", errors="ignore") as f:
             for line in f:
                 parts = line.strip().split()
                 if len(parts) >= 4:
-                    mac, ip, name = parts[1].lower(), parts[2], parts[3]
-                    if name != "*":
-                        if mac not in mac_to_name:
-                            mac_to_name[mac] = name
-                    dhcp_leases[ip] = mac
+                    ip, name = parts[2], parts[3]
+                    if ip not in known:
+                        known[ip] = name if name != "*" else parts[1]
     except Exception:
         pass
 
-# 3. 读取 ip neigh 活跃局域网邻居 (精准捕获包含 NAS、静态IP设备在内的真实在线设备)
-online = {}
-try:
-    neigh = subprocess.check_output(["ip", "neigh"], text=True)
-    for line in neigh.splitlines():
-        parts = line.strip().split()
-        if len(parts) >= 4 and parts[0].startswith("192.168.") and parts[0] != "192.168.1.1":
-            ip = parts[0]
-            if "FAILED" not in line and "lladdr" in parts:
-                idx = parts.index("lladdr")
-                mac = parts[idx+1].lower()
-                dname = mac_to_name.get(mac, ip_to_name.get(ip, f"设备 ({ip})"))
-                online[ip] = (dname, mac)
-except Exception:
-    pass
-
-# 将仍有效但 ARP 暂处于延迟态的 DHCP 租约设备也补充纳入
-for ip, mac in dhcp_leases.items():
-    if ip not in online and ip != "192.168.1.1":
-        dname = mac_to_name.get(mac, ip_to_name.get(ip, f"设备 ({ip})"))
-        online[ip] = (dname, mac)
-
-# 按 IP 地址排序输出
-for ip in sorted(online.keys(), key=lambda x: [int(c) for c in x.split('.') if c.isdigit()]):
-    name, mac = online[ip]
-    print(f"{ip}\t{name}")
+# ping 探测，有响应才算在线，无响应不显示
+for ip in sorted(known.keys(), key=lambda x: [int(c) for c in x.split('.') if c.isdigit()]):
+    if ip in ("192.168.1.1",):
+        continue
+    r = subprocess.run(["ping", "-c", "1", "-W", "1", ip],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if r.returncode == 0:
+        print(f"{ip}\t{known[ip]}")
 PYEOF
 
 DEVICE_COUNT=$(wc -l < "$ONLINE_DEVS_TMP" 2>/dev/null || echo 0)
@@ -627,3 +594,4 @@ if [ "$AUTO_POWEROFF" = "1" ] && [ "$TEMP_C" -ge "$ALERT_TEMP" ] && [ "$1" != "t
     echo "[CRITICAL] CPU 过热 (${TEMP_C}°C)，将在 3 分钟后安全关机..."
     (sleep 180 && poweroff) >/dev/null 2>&1 &
 fi
+

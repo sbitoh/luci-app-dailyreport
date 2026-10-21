@@ -72,7 +72,8 @@
 根据你固件所使用的包管理器选择对应格式：
 
 #### 传统 `opkg` 环境 (OpenWrt 24.10, 23.05 及历史固件)
-- 📦 **最新版 v1.3.2**: [点击下载 luci-app-dailyreport_1.3.2-1_all.ipk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.3.2-1_all.ipk)
+- 📦 **最新版 v1.4.0**: [点击下载 luci-app-dailyreport_1.4.0-1_all.ipk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.4.0-1_all.ipk)
+- 📦 **历史版 v1.3.2**: [点击下载 luci-app-dailyreport_1.3.2-1_all.ipk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.3.2-1_all.ipk)
 - 📦 **历史版 v1.3.1**: [点击下载 luci-app-dailyreport_1.3.1-1_all.ipk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.3.1-1_all.ipk)
 - 📦 **历史版 v1.3.0**: [点击下载 luci-app-dailyreport_1.3.0-1_all.ipk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.3.0-1_all.ipk)
 - 📦 **历史版 v1.2.0**: [点击下载 luci-app-dailyreport_1.2.0-1_all.ipk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.2.0-1_all.ipk)
@@ -81,20 +82,21 @@
 
 OpenWrt 终端一键安装：
 ```bash
-wget -O /tmp/luci-app-dailyreport.ipk https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.3.2-1_all.ipk
+wget -O /tmp/luci-app-dailyreport.ipk https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.4.0-1_all.ipk
 opkg install /tmp/luci-app-dailyreport.ipk
 /etc/init.d/rpcd reload
 ```
 
 #### 新版 `apk` (APK v3) 环境 (OpenWrt SNAPSHOT / 主线开发版)
-- 🚀 **最新版 v1.3.2 APK**: [点击下载 luci-app-dailyreport-1.3.2-r1.apk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport-1.3.2-r1.apk)
+- 🚀 **最新版 v1.4.0 APK**: [点击下载 luci-app-dailyreport-1.4.0-r1.apk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport-1.4.0-r1.apk)
+- 🚀 **历史版 v1.3.2 APK**: [点击下载 luci-app-dailyreport-1.3.2-r1.apk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport-1.3.2-r1.apk)
 - 🚀 **历史版 v1.3.1 APK**: [点击下载 luci-app-dailyreport-1.3.1-r1.apk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport-1.3.1-r1.apk)
 - 🚀 **历史版 v1.3.0 APK**: [点击下载 luci-app-dailyreport-1.3.0-r1.apk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport-1.3.0-r1.apk)
 - 🚀 **历史版 v1.2.0 APK**: [点击下载 luci-app-dailyreport-1.2.0-r1.apk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport-1.2.0-r1.apk)
 
 OpenWrt 终端一键安装：
 ```bash
-wget -O /tmp/luci-app-dailyreport.apk https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport-1.3.2-r1.apk
+wget -O /tmp/luci-app-dailyreport.apk https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport-1.4.0-r1.apk
 apk add --allow-untrusted /tmp/luci-app-dailyreport.apk
 /etc/init.d/rpcd reload
 ```
@@ -114,7 +116,21 @@ apk add --allow-untrusted /tmp/luci-app-dailyreport.apk
 
 ## 📝 更新日志 (Release Notes)
 
-### v1.3.2 (2026-10-19)
+### v1.4.0 (2026-10-21)
+* ⏱️ **48 小时环形快照池 + 24 小时动态滑动时间窗口（Sliding Window）**：
+  - 彻底摒弃传统的固定 0 点强制重置基准模式，消除跨天统计盲区与数据丢失风险；
+  - 引入后台每小时原子级快照持久化机制，自动保留最近 48 小时历史轮转切片；
+  - 无论是每日定时自动发送还是用户主动点击“立即测试发送”，系统均统一精准提取“当前时刻往前倒推 24 小时”的同一笔快照作为起跑底数；
+  - 测试发送与日常生成彻底转为纯只读提取，杜绝因手动测试打乱定时基准的问题；快照累积阶段具备平滑降级与跨度动态标注。
+* 🔄 **三轨数据基准统一与闭环对账**：
+  - 物理 WAN 口吞吐、局域网各终端外网流量、网站访问与目标公网 IP 排行三大数据源全部基于同一时刻的 24 小时快照底数计算净增量；
+  - 从算法根源彻底解决因各轨数据统计时间窗口不一致导致的“网站流量超过 WAN 总流量”与数据倒挂现象。
+* 🔍 **真实在线设备精准主动探测**：
+  - 重构在线设备判定逻辑，采用局域网轻量主动网络探测（ping 响应）结合 UCI 静态绑定与 DHCP 动态主机名解析；
+  - 彻底剔除因未到期的 DHCP 租约或过期的 ARP 缓存（FAILED 状态）造成的离线/关机设备被误判在线的顽疾。
+* 📊 **统计周期内设备流量全景捕捉**：
+  - 只要设备在过去 24 小时统计周期内产生过公网流量，无论当前处于在线还是离线状态，均如实呈现于终端流量排行榜中；
+  - 自动净化周期内无外网流量（0 B）的静默设备，保持报表清爽整洁。
 * 🚀 **全新内核级目标 IP 动态记账（杜绝短连接断开后流量蒸发）**：
   - 彻底重构底层网站与外网连接采集引擎，弃用易丢数据的 `/proc/net/nf_conntrack` 抽样轮询；
   - 接入 Linux 内核 `nftables` 动态计数器集合（`target_ip_rx` / `target_ip_tx`），不论大文件下载还是短连接传输，在连接关闭释放后仍 100% 永久留存字节数；

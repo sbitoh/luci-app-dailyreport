@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+*.bak*
+*.tmp
+htdocs/luci-static/resources/view/dailyreport/config_v132.js
+htdocs/luci-static/resources/view/dailyreport/config_view.js

@@ -4,7 +4,7 @@ pkg_dir = '/home/sbitoh/luci-app-dailyreport'
 bin_dir = os.path.join(pkg_dir, 'bin/packages')
 os.makedirs(bin_dir, exist_ok=True)
 
-version = "1.3.2"
+version = "1.4.0"
 release = "1"
 out_ipk = os.path.join(bin_dir, f'luci-app-dailyreport_{version}-{release}_all.ipk')
 out_apk = os.path.join(bin_dir, f'luci-app-dailyreport-{version}-r{release}.apk')
@@ -76,8 +76,10 @@ with tarfile.open(fileobj=data_buf, mode='w:gz', format=tarfile.GNU_FORMAT) as d
 
     root_path = os.path.join(pkg_dir, 'root')
     for root, dirs, files in os.walk(root_path):
+        if '__pycache__' in root:
+            continue
         for f in files:
-            if f.endswith('.bak') or '.bak.' in f:
+            if f.endswith('.bak') or '.bak.' in f or f.endswith('.pyc'):
                 continue
             full_p = os.path.join(root, f)
             rel_p = os.path.relpath(full_p, root_path)
@@ -93,6 +95,8 @@ with tarfile.open(fileobj=data_buf, mode='w:gz', format=tarfile.GNU_FORMAT) as d
     htdocs_path = os.path.join(pkg_dir, 'htdocs')
     for root, dirs, files in os.walk(htdocs_path):
         for f in files:
+            if f.endswith('.bak') or '.bak.' in f or f.startswith('config_v') or f == 'config_view.js':
+                continue
             full_p = os.path.join(root, f)
             tar_name = './www/' + os.path.relpath(full_p, htdocs_path)
             ensure_parents(tar_name)
@@ -163,8 +167,10 @@ with tarfile.open(out_apk, 'w:gz', format=tarfile.GNU_FORMAT) as apk_tar:
                     apk_dirs_added.add(cur)
 
     for root, dirs, files in os.walk(root_path):
+        if '__pycache__' in root:
+            continue
         for f in files:
-            if f.endswith('.bak') or '.bak.' in f:
+            if f.endswith('.bak') or '.bak.' in f or f.endswith('.pyc'):
                 continue
             full_p = os.path.join(root, f)
             rel_p = os.path.relpath(full_p, root_path)
@@ -178,6 +184,8 @@ with tarfile.open(out_apk, 'w:gz', format=tarfile.GNU_FORMAT) as apk_tar:
 
     for root, dirs, files in os.walk(htdocs_path):
         for f in files:
+            if f.endswith('.bak') or '.bak.' in f or f.startswith('config_v') or f == 'config_view.js':
+                continue
             full_p = os.path.join(root, f)
             rel_p = 'www/' + os.path.relpath(full_p, htdocs_path)
             ensure_apk_parents(rel_p)
