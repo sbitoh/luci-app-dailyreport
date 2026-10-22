@@ -10,6 +10,8 @@ import subprocess
 import os
 import sys
 import time
+import re
+import urllib.request
 
 def fmt_bytes(b):
     try:
@@ -149,6 +151,79 @@ def read_wan_bytes(ifname):
         pass
     return 0, 0
 
+def collect_proxy_controller_stats():
+    """
+    通用自适应代理探针：
+    静默探测本地常见代理内核控制端口 (9090 / 7890 / 9999 等)，提取客户端与网站的实时传输量。
+    若无代理或未开启外部控制器，自动捕获异常并平滑返回空数据，绝不阻塞或抛错。
+    """
+    client_stats = {}
+    site_stats = {}
+    
+    ports_and_secrets = []
+    
+    # 1. 尝试从 OpenClash 配置文件读取端口与密钥
+    try:
+        cfg_path = "/etc/openclash/config.yaml"
+        if os.path.exists(cfg_path):
+            with open(cfg_path, "r", encoding="utf-8", errors="ignore") as f:
+                content = f.read()
+                port = 9090
+                sec = ""
+                m_port = re.search(r"external-controller:\s*['\"]?(?:0\.0\.0\.0|127\.0\.0\.1)?:?(\d+)['\"]?", content)
+                if m_port:
+                    port = int(m_port.group(1))
+                m_sec = re.search(r"secret:\s*['\"](.*?)['\"]", content)
+                if m_sec:
+                    sec = m_sec.group(1).strip()
+                ports_and_secrets.append((port, sec))
+    except Exception:
+        pass
+
+    # 2. 默认常见组合探针
+    for p, s in [(9090, ""), (9090, "852172"), (7890, ""), (9999, "")]:
+        if (p, s) not in ports_and_secrets:
+            ports_and_secrets.append((p, s))
+
+    for port, secret in ports_and_secrets:
+        try:
+            url = f"http://127.0.0.1:{port}/connections"
+            headers = {"User-Agent": "dailyreport-probe"}
+            if secret:
+                headers["Authorization"] = f"Bearer {secret}"
+            
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req, timeout=1.5) as resp:
+                data = json.loads(resp.read().decode("utf-8", errors="ignore"))
+                conns = data.get("connections", [])
+                for c in conns:
+                    meta = c.get("metadata", {})
+                    src_ip = meta.get("sourceIP")
+                    host = meta.get("host") or meta.get("destinationIP")
+                    dl = int(c.get("download", 0))
+                    ul = int(c.get("upload", 0))
+                    
+                    if src_ip:
+                        if src_ip not in client_stats:
+                            client_stats[src_ip] = {"rx": 0, "tx": 0}
+                        client_stats[src_ip]["rx"] += dl
+                        client_stats[src_ip]["tx"] += ul
+                        
+                    if host:
+                        # 过滤掉 DNS 与内部广播探测
+                        if host not in ["1.1.1.1", "1.12.12.12", "dns.google", "cloudflare-dns.com", "223.5.5.5"]:
+                            if host not in site_stats:
+                                site_stats[host] = [0.0, 0.0]
+                            site_stats[host][0] += dl
+                            site_stats[host][1] += ul
+                # 探测到一个可用并提取成功，结束探针
+                if client_stats or site_stats:
+                    break
+        except Exception:
+            continue
+
+    return client_stats, site_stats
+
 def safe_atomic_json_dump(data, target_path):
     """安全原子写入 JSON 文件，杜绝大并发或中断导致的文件损坏与数据重叠"""
     tmp_path = f"{target_path}.tmp"
@@ -206,6 +281,8 @@ def load_window(snapshots_dir, margin=6 * 3600):
             "nlbw": best.get("nlbw") or {},
             "wan": best.get("wan") or {},
             "target_ips": best.get("target_ips") or {},
+            "proxy_clients": best.get("proxy_clients") or {},
+            "proxy_sites": best.get("proxy_sites") or {},
             "label": "过去24小时",
             "note": f"统计区间：{since} 至现在",
             "since": since,
@@ -224,6 +301,8 @@ def load_window(snapshots_dir, margin=6 * 3600):
             "nlbw": oldest.get("nlbw") or {},
             "wan": oldest.get("wan") or {},
             "target_ips": oldest.get("target_ips") or {},
+            "proxy_clients": oldest.get("proxy_clients") or {},
+            "proxy_sites": oldest.get("proxy_sites") or {},
             "label": f"过去{span_str}（快照积累中，满24小时后对齐）",
             "note": f"统计区间：{since} 至现在（快照尚不足24小时，数据仅供参考）",
             "since": since,
@@ -235,6 +314,8 @@ def load_window(snapshots_dir, margin=6 * 3600):
         "nlbw": {},
         "wan": {},
         "target_ips": {},
+        "proxy_clients": {},
+        "proxy_sites": {},
         "label": "过去24小时",
         "note": "暂无快照数据，首次快照将在整点写入。",
         "since": "",
@@ -340,12 +421,15 @@ def main():
         try:
             os.makedirs(snapshots_dir, exist_ok=True)
             now_ts = int(time.time())
+            proxy_clients, proxy_sites = collect_proxy_controller_stats()
             snap_payload = {
                 "ts": now_ts,
                 "time_str": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(now_ts)),
                 "wan": {"ifname": get_wan_interface(), "rx": read_wan_bytes(get_wan_interface())[0], "tx": read_wan_bytes(get_wan_interface())[1]},
                 "nlbw": collect_nlbw_cur_raw(),
                 "target_ips": collect_target_ip_cur_raw(),
+                "proxy_clients": proxy_clients,
+                "proxy_sites": proxy_sites,
             }
             wan_if = snap_payload["wan"]["ifname"]
             wrx, wtx = read_wan_bytes(wan_if)
@@ -372,6 +456,8 @@ def main():
     base_data = window["nlbw"]
     wan_base_data = window["wan"]
     base_ips = window["target_ips"]
+    base_proxy_clients = window.get("proxy_clients", {})
+    base_proxy_sites = window.get("proxy_sites", {})
     window_label = window["label"]
     window_note = window["note"]
 
@@ -435,11 +521,14 @@ def main():
     devices = {}
     window_ready = bool(window.get("ready"))
     nlbw_cur_raw = collect_nlbw_cur_raw() if (enable_traffic and window_ready) else {}
+    live_proxy_clients, live_proxy_sites = collect_proxy_controller_stats() if window_ready else ({}, {})
 
     if not window_ready:
         base_data = {}
         wan_base_data = {}
         base_ips = {}
+        base_proxy_clients = {}
+        base_proxy_sites = {}
 
     # 联合所有已知 MAC：包含基准里的历史活跃设备、当前有流量设备以及 DHCP 静态绑定设备
     all_tracked_macs = set(base_data.keys()) | set(nlbw_cur_raw.keys()) | set(mac_to_name.keys()) if window_ready else set()
@@ -459,6 +548,17 @@ def main():
                 if l_mac == mac:
                     ip = lease_ip
                     break
+
+        # 融合代理核心记录的实时流量 (若该 IP 走代理产生可观下行，平滑归并)
+        if ip and ip in live_proxy_clients:
+            p_cur = live_proxy_clients[ip]
+            p_base = base_proxy_clients.get(ip, {"rx": 0, "tx": 0})
+            p_diff_rx = p_cur["rx"] - p_base["rx"] if p_cur["rx"] >= p_base["rx"] else p_cur["rx"]
+            p_diff_tx = p_cur["tx"] - p_base["tx"] if p_cur["tx"] >= p_base["tx"] else p_cur["tx"]
+            if p_diff_rx > diff_rx:
+                diff_rx = p_diff_rx
+            if p_diff_tx > diff_tx:
+                diff_tx = p_diff_tx
 
         unnamed_prefix = "Device" if lang == "en" else "设备"
         dev_name = mac_to_name.get(mac, ip_to_name.get(ip, f"{unnamed_prefix} [{mac.upper()}]"))
@@ -579,6 +679,17 @@ def main():
                 sites_delta[domain] = [0.0, 0.0]
             sites_delta[domain][0] += d_rx
             sites_delta[domain][1] += d_tx
+
+        # 融合代理核心解析出的实际目标域名流量 (如 YouTube / GitHub 等代理域名)
+        for dom, stats in live_proxy_sites.items():
+            b_stats = base_proxy_sites.get(dom, [0.0, 0.0])
+            p_dl = stats[0] - b_stats[0] if stats[0] >= b_stats[0] else stats[0]
+            p_ul = stats[1] - b_stats[1] if stats[1] >= b_stats[1] else stats[1]
+            if p_dl + p_ul > 0:
+                if dom not in sites_delta:
+                    sites_delta[dom] = [0.0, 0.0]
+                sites_delta[dom][0] += p_dl
+                sites_delta[dom][1] += p_ul
 
         # 若新机制刚生效还没有产生大量条目，合并旧 csv 备选，确保报表丰满
         if len(sites_delta) < 5 and os.path.exists("/root/site_traffic.csv"):
