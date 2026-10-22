@@ -13,6 +13,89 @@ import time
 import re
 import urllib.request
 
+def normalize_target_domain(raw_target, lang="zh"):
+    """
+    智能聚类与友好域名归并：
+    将复杂的底层 CDN 切片域名、音视频碎片分发域名、以及代理/游戏节点，
+    归拢到对应的主流服务主品牌名下，确保统计报表一目了然。
+    """
+    if not raw_target:
+        return "未知 (Unknown)"
+    t = raw_target.lower().strip()
+
+    # 1. 哔哩哔哩 (Bilibili)
+    if any(k in t for k in ["bilibili.com", "bilivideo.cn", "bilivideo.com", "biliapi.net", "hdslb.com", "mcdn.bilivideo.cn"]):
+        return "Bilibili" if lang == "en" else "哔哩哔哩 (Bilibili)"
+
+    # 2. YouTube / Google 视频与服务
+    if any(k in t for k in ["youtube.com", "googlevideo.com", "ytimg.com", "youtu.be"]):
+        return "YouTube" if lang == "en" else "YouTube 视频"
+    if any(k in t for k in ["google.com", "googleapis.com", "gstatic.com", "googleusercontent.com", "1e100.net"]):
+        return "Google Services" if lang == "en" else "Google 服务"
+
+    # 3. 抖音 / 剪映 / 字节跳动视频
+    if any(k in t for k in ["douyinvod.com", "douyinpic.com", "douyin.com", "bytegoofy.com", "bytedance.com", "snssdk.com"]):
+        return "Douyin / TikTok" if lang == "en" else "抖音 / 字节跳动视频"
+
+    # 4. 腾讯视频 / 微信 / 腾讯云 CDN
+    if any(k in t for k in ["video.qq.com", "qpic.cn", "gtimg.cn", "weixin.qq.com", "wechat.com", "tenpay.com", "tencent.com", "cdnhwc2.com", "myqcloud.com", "tdnsvod"]):
+        return "Tencent / WeChat Stream" if lang == "en" else "腾讯 / 微信 / 视频流媒体"
+
+    # 5. 阿里巴巴 / 优酷 / 阿里 CDN
+    if any(k in t for k in ["youku.com", "ykimg.com", "taobao.com", "alipay.com", "aliyuncs.com", "alibabadns.com", "alicdn.com"]):
+        return "Alibaba / Youku CDN" if lang == "en" else "阿里 / 优酷 / 媒体分发网络"
+
+    # 6. 爱奇艺
+    if any(k in t for k in ["iqiyi.com", "qiyi.com", "iqiyipic.com"]):
+        return "iQIYI" if lang == "en" else "爱奇艺 (iQIYI)"
+
+    # 7. Steam / Dota 2 / 游戏分发
+    if any(k in t for k in ["dota2.com", "steampowered.com", "steamcommunity.com", "steamcontent.com", "steamstatic.com", "valvesoftware.com"]):
+        return "Steam / Dota 2" if lang == "en" else "Steam / Dota 2 游戏平台"
+
+    # 8. GitHub / 开发者源
+    if any(k in t for k in ["github.com", "githubusercontent.com", "github.io", "ghcr.io"]):
+        return "GitHub" if lang == "en" else "GitHub 源码与容器库"
+
+    # 9. Docker / 容器镜像
+    if any(k in t for k in ["docker.com", "docker.io", "cloudfront.docker.com"]):
+        return "Docker Registry" if lang == "en" else "Docker 镜像源"
+
+    # 10. 小红书
+    if "xiaohongshu.com" in t or "xhscdn.com" in t:
+        return "Xiaohongshu" if lang == "en" else "小红书 (Xiaohongshu)"
+
+    # 11. 百度
+    if any(k in t for k in ["baidu.com", "bdstatic.com", "baidupcs.com"]):
+        return "Baidu" if lang == "en" else "百度服务"
+
+    # 12. 苹果服务
+    if any(k in t for k in ["apple.com", "icloud.com", "aaplimg.com", "mzstatic.com"]):
+        return "Apple / iCloud" if lang == "en" else "Apple / iCloud 服务"
+
+    # 13. 微软
+    if any(k in t for k in ["microsoft.com", "windowsupdate.com", "live.com", "office.com", "azure.com"]):
+        return "Microsoft / Windows" if lang == "en" else "Microsoft / Windows 更新"
+
+    # 14. 常见的运营商/主流公共 CDN 汇总
+    if any(k in t for k in ["bsgslb.cn", "cloudjscdn.cn", "gslb4.com", "glb4.com", "ctlcdn.cn", "ourwebpic.com"]):
+        return "Streaming Media CDN" if lang == "en" else "运营商视频与流媒体 CDN"
+
+    # 15. 若是纯 IP，按已知网段做友好提示
+    if re.match(r"^\d+\.\d+\.\d+\.\d+$", t):
+        if t in ["180.163.126.1", "111.206.90.3"]:
+            return f"{t} (Backbone CDN)" if lang == "en" else f"{t} (骨干节点高速分发)"
+        return t
+
+    # 16. 其他常规多级域名：提取二级主域名（如 a.b.example.com -> example.com）
+    parts = t.split(".")
+    if len(parts) >= 2:
+        if len(parts) >= 3 and parts[-2] in ["com", "net", "org", "gov", "edu"] and parts[-1] in ["cn", "hk", "tw", "uk"]:
+            return ".".join(parts[-3:])
+        return ".".join(parts[-2:])
+
+    return raw_target
+
 def fmt_bytes(b):
     try:
         b = float(b)
@@ -673,12 +756,13 @@ def main():
             if d_rx + d_tx <= 0:
                 continue
 
-            # 优先反查真实域名
+            # 优先反查真实域名并做品牌/音视频智能归并
             domain = ip_to_domain.get(ip, ip)
-            if domain not in sites_delta:
-                sites_delta[domain] = [0.0, 0.0]
-            sites_delta[domain][0] += d_rx
-            sites_delta[domain][1] += d_tx
+            friendly_name = normalize_target_domain(domain, lang=lang)
+            if friendly_name not in sites_delta:
+                sites_delta[friendly_name] = [0.0, 0.0]
+            sites_delta[friendly_name][0] += d_rx
+            sites_delta[friendly_name][1] += d_tx
 
         # 融合代理核心解析出的实际目标域名流量 (如 YouTube / GitHub 等代理域名)
         for dom, stats in live_proxy_sites.items():
@@ -686,10 +770,11 @@ def main():
             p_dl = stats[0] - b_stats[0] if stats[0] >= b_stats[0] else stats[0]
             p_ul = stats[1] - b_stats[1] if stats[1] >= b_stats[1] else stats[1]
             if p_dl + p_ul > 0:
-                if dom not in sites_delta:
-                    sites_delta[dom] = [0.0, 0.0]
-                sites_delta[dom][0] += p_dl
-                sites_delta[dom][1] += p_ul
+                friendly_dom = normalize_target_domain(dom, lang=lang)
+                if friendly_dom not in sites_delta:
+                    sites_delta[friendly_dom] = [0.0, 0.0]
+                sites_delta[friendly_dom][0] += p_dl
+                sites_delta[friendly_dom][1] += p_ul
 
         # 若新机制刚生效还没有产生大量条目，合并旧 csv 备选，确保报表丰满
         if len(sites_delta) < 5 and os.path.exists("/root/site_traffic.csv"):
@@ -701,8 +786,13 @@ def main():
                             dom = parts[0].strip()
                             dl = float(parts[1])
                             ul = float(parts[2])
-                            if dom and dom not in sites_delta:
-                                sites_delta[dom] = [dl, ul]
+                            if dom:
+                                friendly_csv = normalize_target_domain(dom, lang=lang)
+                                if friendly_csv not in sites_delta:
+                                    sites_delta[friendly_csv] = [dl, ul]
+                                else:
+                                    sites_delta[friendly_csv][0] += dl
+                                    sites_delta[friendly_csv][1] += ul
             except Exception:
                 pass
 
