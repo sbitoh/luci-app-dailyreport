@@ -671,31 +671,12 @@ def main():
         wan_phy_rx = cur_wrx - b_wrx if cur_wrx >= b_wrx else cur_wrx
         wan_phy_tx = cur_wtx - b_wtx if cur_wtx >= b_wtx else cur_wtx
 
-    # 核心总览数据 (实事求是呈现)
+    # 核心总览数据 (实事求是呈现真实硬件物理值)
     wan_total_rx = wan_phy_rx if wan_phy_rx > 0 else dev_total_rx
     wan_total_tx = wan_phy_tx if wan_phy_tx > 0 else dev_total_tx
     wan_total = wan_total_rx + wan_total_tx
 
-    # 轨 C：将经过代理或系统出网的公网总吞吐，按各硬件今日实际业务出网比例，完全合并到各个硬件名下！
-    # 绝不单独列出“代理分流”，将所有真实 WAN 物理流量 100% 落实到具体硬件
-    unallocated_rx = max(0, wan_total_rx - dev_total_rx)
-    unallocated_tx = max(0, wan_total_tx - dev_total_tx)
-
-    if dev_total_rx > 0 or dev_total_tx > 0:
-        base_dev_rx = dev_total_rx
-        base_dev_tx = dev_total_tx
-        for mac, d in devices.items():
-            if base_dev_rx > 0:
-                d["wan_rx"] += int(unallocated_rx * (d["wan_rx"] / base_dev_rx))
-            if base_dev_tx > 0:
-                d["wan_tx"] += int(unallocated_tx * (d["wan_tx"] / base_dev_tx))
-            d["total"] = d["wan_rx"] + d["wan_tx"]
-
-    # 重新求和终端硬件总计，使得终端统计 100% 完全等于公网总吞吐
-    dev_total_rx = sum(d["wan_rx"] for d in devices.values())
-    dev_total_tx = sum(d["wan_tx"] for d in devices.values())
-
-    # 3. 生成设备排行 HTML 与摘要列表
+    # 3. 生成设备排行 HTML 与摘要列表 (严格按硬件真实底层采集，绝不人为掺水/平摊/计算分配)
     dev_table_rows = ""
     dev_sorted = []
     if devices:
@@ -802,7 +783,7 @@ def main():
         for dom, (dl, ul) in sorted_sites:
             if dl + ul < 1024:
                 continue
-            site_table_rows += f"<tr><td style='padding:6px 10px;border-bottom:1px solid #f0f0f0;color:#666;text-align:center;'>{idx}</td><td style='padding:6px 10px;border-bottom:1px solid #f0f0f0;font-family:monospace;color:#333;'>{dom}</td><td style='padding:6px 10px;border-bottom:1px solid #f0f0f0;color:#1890ff;text-align:right;'>⬇️ {fmt_bytes(dl)}</td><td style='padding:6px 10px;border-bottom:1px solid #f0f0f0;color:#52c41a;text-align:right;'>⬆️ {fmt_bytes(ul)}</td></tr>\n"
+            site_table_rows += f"<tr><td style='padding:6px 10px;border-bottom:1px solid #f0f0f0;color:#666;text-align:center;'>{idx}</td><td style='padding:6px 10px;border-bottom:1px solid #f0f0f0;font-family:monospace;color:#333;'>{dom}</td><td style='padding:6px 10px;border-bottom:1px solid #f0f0f0;color:#1890ff;text-align:right;'>⬇️ {fmt_bytes(dl)}</td><td style='padding:6px 10px;border-bottom:1px solid #f0f0f0;color:#52c41a;text-align:right;'>⬆️ {fmt_bytes(ul)}</td><td style='padding:6px 10px;border-bottom:1px solid #f0f0f0;font-weight:700;color:#fa8c16;text-align:right;'>{fmt_bytes(dl+ul)}</td></tr>\n"
             idx += 1
 
     if not site_table_rows:
@@ -827,7 +808,7 @@ def main():
         top_site_lines = []
         if sorted_sites:
             for dom, (dl, ul) in sorted_sites[:5]:
-                top_site_lines.append(f"  • {dom}: {fmt_bytes(dl+ul)}")
+                top_site_lines.append(f"  • {dom}: ⬇️{fmt_bytes(dl)} ⬆️{fmt_bytes(ul)}")
 
         if lang == "en":
             summary_text = f"WAN Bandwidth: ⬇️{fmt_bytes(wan_total_rx)} ⬆️{fmt_bytes(wan_total_tx)} (Clients: {fmt_bytes(dev_total_rx + dev_total_tx)}){top_dev_str}"
@@ -853,7 +834,7 @@ def main():
         lbl_rx = "⬇️ WAN Download"
         lbl_tx = "⬆️ WAN Upload"
         lbl_tot = "🔄 Total WAN Traffic"
-        lbl_dev_sub = "Clients Sum"
+        lbl_dev_sub = "Clients HW"
         title_devs = "📱 LAN Clients WAN Traffic Ranking"
         th_dev_name = "Device Name"
         th_dev_ip = "IP / MAC"
@@ -864,12 +845,13 @@ def main():
         th_site_domain = "Domain / IP"
         th_site_rx = "Download"
         th_site_tx = "Upload"
+        th_site_tot = "Total"
     else:
         title_summary = f"📶 过去24小时外网流量总览"
         lbl_rx = "⬇️ 公网下载"
         lbl_tx = "⬆️ 公网上传"
         lbl_tot = "🔄 公网总吞吐"
-        lbl_dev_sub = "终端统计"
+        lbl_dev_sub = "终端直连"
         title_devs = "📱 局域网各设备外网流量排行"
         th_dev_name = "设备名称"
         th_dev_ip = "IP / MAC"
@@ -880,6 +862,7 @@ def main():
         th_site_domain = "网站域名 / 公网 IP"
         th_site_rx = "下载流量"
         th_site_tx = "上传流量"
+        th_site_tot = "总计"
 
     html = f"""
     <div style='margin-bottom:25px;'>
@@ -932,6 +915,7 @@ def main():
                             <th style='padding:6px 10px;border-bottom:1px solid #eee;'>{th_site_domain}</th>
                             <th style='padding:6px 10px;border-bottom:1px solid #eee;text-align:right;'>{th_site_rx}</th>
                             <th style='padding:6px 10px;border-bottom:1px solid #eee;text-align:right;'>{th_site_tx}</th>
+                            <th style='padding:6px 10px;border-bottom:1px solid #eee;text-align:right;'>{th_site_tot}</th>
                         </tr>
                     </thead>
                     <tbody>
