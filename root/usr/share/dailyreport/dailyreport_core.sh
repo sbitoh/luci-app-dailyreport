@@ -214,12 +214,11 @@ if [ "$ENABLE_BANIP" = "1" ]; then
     CURR_BANIP_FILE="/tmp/dailyreport_curr_banip.tmp"
     CURR_NFT_FILE="/tmp/dailyreport_curr_nft.tmp"
 
-    # 4.1 被 banIP 拦截 (严格统计当天的增量：检查当天加入 blocklist 的 IP)
-    TODAY_DATE=$(date "+%Y-%m-%d")
-    awk -v d="$TODAY_DATE" '$0 ~ d {print $1}' /etc/banip/banip.blocklist 2>/dev/null > "$CURR_BANIP_FILE"
+    # 4.1 被 banIP 拦截 (去除死板日期过滤，提取当前 blocklist 中的所有有效 IP 并做增量比对)
+    grep -E -o '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' /etc/banip/banip.blocklist 2>/dev/null > "$CURR_BANIP_FILE"
     
-    # 增量比对 (测试模式下直接展示当前已捕获的当天增量)
-    if [ "$1" = "test" ] || [ ! -f "$LAST_BANIP_FILE" ]; then
+    # 增量比对 (若无历史记录或强制测试且无历史记录，则取全部；否则仅提取比上次新增的 IP)
+    if [ ! -f "$LAST_BANIP_FILE" ]; then
         NEW_BANIP=$(cat "$CURR_BANIP_FILE" 2>/dev/null)
     else
         NEW_BANIP=$(grep -vFf "$LAST_BANIP_FILE" "$CURR_BANIP_FILE" 2>/dev/null)
