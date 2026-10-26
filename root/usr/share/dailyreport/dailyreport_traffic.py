@@ -211,16 +211,20 @@ def collect_target_ip_cur_raw():
     return res
 
 def get_wan_interface():
-    """获取 WAN 口对应的 3 层物理/逻辑设备名 (如 pppoe-wan)"""
+    """获取 WAN 口对应的底层物理网卡设备名 (优先物理网卡如 eth1，避免 pppoe-wan 拨号断线清零)"""
     try:
         out = subprocess.check_output(["ifstatus", "wan"]).decode("utf-8")
         st = json.loads(out)
+        # 优先读取真实物理承载设备 (如 eth1)，不受宽带断线重连/重拨导致计数器清零影响
+        dev = st.get("device")
+        if dev:
+            return dev
         l3 = st.get("l3_device")
         if l3:
             return l3
     except Exception:
         pass
-    return "pppoe-wan"
+    return "eth1"
 
 def read_wan_bytes(ifname):
     """从 /proc/net/dev 读取指定网口的底层收发字节数"""
