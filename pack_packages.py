@@ -4,7 +4,7 @@ pkg_dir = '/home/sbitoh/luci-app-dailyreport'
 bin_dir = os.path.join(pkg_dir, 'bin/packages')
 os.makedirs(bin_dir, exist_ok=True)
 
-version = "1.5.0"
+version = "1.6.0"
 release = "1"
 out_ipk = os.path.join(bin_dir, f'luci-app-dailyreport_{version}-{release}_all.ipk')
 out_apk = os.path.join(bin_dir, f'luci-app-dailyreport-{version}-r{release}.apk')

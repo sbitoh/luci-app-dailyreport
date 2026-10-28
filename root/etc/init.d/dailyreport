@@ -17,6 +17,11 @@ save_snapshot() {
     [ -f "/tmp/usage.db" ] && cp -f "/tmp/usage.db" "$PERSIST_DIR/usage.db" 2>/dev/null
     [ -f "/root/site_traffic.csv" ] && cp -f "/root/site_traffic.csv" "$PERSIST_DIR/site_traffic.csv" 2>/dev/null
     [ -f "/root/dns_cache.log" ] && cp -f "/root/dns_cache.log" "$PERSIST_DIR/dns_cache.log" 2>/dev/null
+
+    # 持久化当前 nftables dailyreport_tracker 表的所有动态集合 (重启后无缝恢复)
+    if command -v nft >/dev/null 2>&1 && nft list table inet dailyreport_tracker >/dev/null 2>&1; then
+        nft list table inet dailyreport_tracker > "$PERSIST_DIR/nft_tracker.rules" 2>/dev/null || true
+    fi
 }
 
 restore_snapshot() {
@@ -30,20 +35,38 @@ restore_snapshot() {
     if [ ! -f "/root/dns_cache.log" ] && [ -f "$PERSIST_DIR/dns_cache.log" ]; then
         cp -f "$PERSIST_DIR/dns_cache.log" "/root/dns_cache.log" 2>/dev/null
     fi
+
+    # 还原 nftables dailyreport_tracker
+    if [ -f "$PERSIST_DIR/nft_tracker.rules" ] && command -v nft >/dev/null 2>&1; then
+        nft -f "$PERSIST_DIR/nft_tracker.rules" 2>/dev/null || true
+    fi
 }
 
 init_nftables_tracker() {
-    # 检查并自动创建内核级动态目标 IP 记账集合
+    # 检查并自动创建内核级动态目标 IP 与客户端 IP 记账集合 (在 Clash 接管前最前沿统计)
     command -v nft >/dev/null 2>&1 || return 0
     if ! nft list table inet dailyreport_tracker >/dev/null 2>&1; then
         nft add table inet dailyreport_tracker 2>/dev/null || true
         nft 'add set inet dailyreport_tracker private_ips { type ipv4_addr; flags interval; elements = { 10.0.0.0/8, 127.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 224.0.0.0/4, 255.255.255.255 }; }' 2>/dev/null || true
+        nft 'add set inet dailyreport_tracker client_tx { type ipv4_addr; size 65535; flags dynamic; counter; }' 2>/dev/null || true
+        nft 'add set inet dailyreport_tracker client_rx { type ipv4_addr; size 65535; flags dynamic; counter; }' 2>/dev/null || true
+        nft 'add set inet dailyreport_tracker client_tx_v6 { type ipv6_addr; size 65535; flags dynamic; counter; }' 2>/dev/null || true
+        nft 'add set inet dailyreport_tracker client_rx_v6 { type ipv6_addr; size 65535; flags dynamic; counter; }' 2>/dev/null || true
         nft 'add set inet dailyreport_tracker target_ip_rx { type ipv4_addr; size 65535; flags dynamic; counter; }' 2>/dev/null || true
         nft 'add set inet dailyreport_tracker target_ip_tx { type ipv4_addr; size 65535; flags dynamic; counter; }' 2>/dev/null || true
-        nft add chain inet dailyreport_tracker upload_track '{ type filter hook prerouting priority -150; policy accept; }' 2>/dev/null || true
-        nft add chain inet dailyreport_tracker download_track '{ type filter hook postrouting priority 150; policy accept; }' 2>/dev/null || true
-        nft add rule inet dailyreport_tracker upload_track 'iifname "br-lan" ip daddr != @private_ips update @target_ip_tx { ip daddr }' 2>/dev/null || true
-        nft add rule inet dailyreport_tracker download_track 'oifname "br-lan" ip saddr != @private_ips update @target_ip_rx { ip saddr }' 2>/dev/null || true
+
+        # 优先级 priority -300 (比 raw 与 mangle 更靠前，在 Clash 劫持前先抓取)
+        nft 'add chain inet dailyreport_tracker prerouting_track { type filter hook prerouting priority -300; policy accept; }' 2>/dev/null || true
+        nft 'add chain inet dailyreport_tracker postrouting_track { type filter hook postrouting priority 300; policy accept; }' 2>/dev/null || true
+
+        nft 'add rule inet dailyreport_tracker prerouting_track iifname "br-lan" ip saddr == 192.168.1.0/24 ip daddr != @private_ips update @client_tx { ip saddr }' 2>/dev/null || true
+        nft 'add rule inet dailyreport_tracker prerouting_track iifname "br-lan" ip6 saddr != ::1 update @client_tx_v6 { ip6 saddr }' 2>/dev/null || true
+        nft 'add rule inet dailyreport_tracker prerouting_track iifname "br-lan" ip daddr != @private_ips update @target_ip_tx { ip daddr }' 2>/dev/null || true
+        # 从公网入口 (pppoe-wan) 刚进来的那一刻，立即按源 IP 统计所有下载网站与 CDN 节点 (在被 NAT/代理改写前)
+        nft 'add rule inet dailyreport_tracker prerouting_track iifname "pppoe-wan" ip saddr != @private_ips update @target_ip_rx { ip saddr }' 2>/dev/null || true
+
+        nft 'add rule inet dailyreport_tracker postrouting_track oifname "br-lan" ip daddr == 192.168.1.0/24 ip saddr != @private_ips update @client_rx { ip daddr }' 2>/dev/null || true
+        nft 'add rule inet dailyreport_tracker postrouting_track oifname "br-lan" ip6 daddr != ::1 update @client_rx_v6 { ip6 daddr }' 2>/dev/null || true
     fi
 }
 

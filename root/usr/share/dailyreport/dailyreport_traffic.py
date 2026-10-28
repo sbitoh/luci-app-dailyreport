@@ -11,6 +11,7 @@ import os
 import sys
 import time
 import re
+import struct
 import urllib.request
 
 def normalize_target_domain(raw_target, lang="zh"):
@@ -172,34 +173,97 @@ def collect_layer7_cur_raw():
         pass
     return l7_raw
 
-def collect_target_ip_cur_raw():
+def collect_nft_client_cur_raw():
     """
-    从 nftables 的 dailyreport_tracker 动态 set 中读取所有公网目标/源 IP 的真实累计字节数
+    从 nftables 的 dailyreport_tracker 动态 set 中读取局域网设备在最前沿 (Clash 劫持前) 的收发字节数
     """
     rx_dict = {}
     tx_dict = {}
-    
-    def parse_nft_set(set_name):
+
+    def parse_nft_counter_set(set_name):
         res = {}
         try:
-            out = subprocess.check_output(["nft", "list", "set", "inet", "dailyreport_tracker", set_name]).decode("utf-8")
-            for l in out.splitlines():
-                if "counter" in l and "bytes" in l:
-                    items = l.split(",")
-                    for item in items:
-                        if "counter" in item and "bytes" in item:
-                            parts = item.split()
-                            ip = parts[0].strip("{\t ").strip()
-                            if "bytes" in parts:
-                                idx = parts.index("bytes")
-                                b = int(parts[idx+1].strip("}\t ").strip())
-                                res[ip] = b
+            raw = subprocess.check_output(["nft", "-j", "list", "set", "inet", "dailyreport_tracker", set_name]).decode("utf-8")
+            data = json.loads(raw)
+            for item in data.get("nftables", []):
+                if "set" in item and item["set"].get("name") == set_name:
+                    elems = item["set"].get("elem", [])
+                    for e in elems:
+                        if isinstance(e, dict) and "elem" in e:
+                            val = e["elem"].get("val")
+                            cnt = e["elem"].get("counter", {})
+                            b = cnt.get("bytes", 0)
+                            if val and b:
+                                res[str(val).lower()] = b
         except Exception:
             pass
         return res
 
-    rx_dict = parse_nft_set("target_ip_rx")
-    tx_dict = parse_nft_set("target_ip_tx")
+    rx4 = parse_nft_counter_set("client_rx")
+    tx4 = parse_nft_counter_set("client_tx")
+    rx6 = parse_nft_counter_set("client_rx_v6")
+    tx6 = parse_nft_counter_set("client_tx_v6")
+
+    rx_dict.update(rx4)
+    rx_dict.update(rx6)
+    tx_dict.update(tx4)
+    tx_dict.update(tx6)
+
+    all_ips = set(rx_dict.keys()) | set(tx_dict.keys())
+    res = {}
+    for ip in all_ips:
+        res[ip] = {
+            "rx": rx_dict.get(ip, 0),
+            "tx": tx_dict.get(ip, 0)
+        }
+    return res
+
+def load_fake_ip_dict():
+    """从 OpenClash 历史数据库中解析 Fake-IP (198.18.0.0/16) 与真实域名的二进制映射"""
+    mapping = {}
+    for db_path in ["/etc/openclash/history/config.db", "/etc/openclash/cache.db"]:
+        if os.path.exists(db_path):
+            try:
+                with open(db_path, "rb") as f:
+                    data = f.read()
+                pattern = re.compile(b'\xc6\x12([\x00-\xff]{2})([a-zA-Z0-9][-a-zA-Z0-9.]+\.[a-zA-Z]{2,})')
+                for match in pattern.finditer(data):
+                    suffix = match.group(1)
+                    domain = match.group(2).decode("ascii", errors="ignore")
+                    ip_int = struct.unpack("!H", suffix)[0]
+                    ip_str = f"198.18.{ip_int >> 8}.{ip_int & 0xff}"
+                    mapping[ip_str] = domain
+                if mapping:
+                    break
+            except Exception:
+                pass
+    return mapping
+
+def collect_target_ip_cur_raw():
+    """
+    从 nftables 的 dailyreport_tracker 动态 set 中读取所有公网目标/源 IP 的真实累计字节数 (采用 JSON 格式解析，绝不截断丢项)
+    """
+    def parse_nft_counter_set(set_name):
+        res = {}
+        try:
+            raw = subprocess.check_output(["nft", "-j", "list", "set", "inet", "dailyreport_tracker", set_name]).decode("utf-8")
+            data = json.loads(raw)
+            for item in data.get("nftables", []):
+                if "set" in item and item["set"].get("name") == set_name:
+                    elems = item["set"].get("elem", [])
+                    for e in elems:
+                        if isinstance(e, dict) and "elem" in e:
+                            val = e["elem"].get("val")
+                            cnt = e["elem"].get("counter", {})
+                            b = cnt.get("bytes", 0)
+                            if val and b:
+                                res[str(val).lower()] = b
+        except Exception:
+            pass
+        return res
+
+    rx_dict = parse_nft_counter_set("target_ip_rx")
+    tx_dict = parse_nft_counter_set("target_ip_tx")
 
     all_ips = set(rx_dict.keys()) | set(tx_dict.keys())
     res = {}
@@ -367,6 +431,7 @@ def load_window(snapshots_dir, margin=6 * 3600):
             "ready": True,
             "nlbw": best.get("nlbw") or {},
             "wan": best.get("wan") or {},
+            "client_ips": best.get("client_ips") or {},
             "target_ips": best.get("target_ips") or {},
             "proxy_clients": best.get("proxy_clients") or {},
             "proxy_sites": best.get("proxy_sites") or {},
@@ -387,6 +452,7 @@ def load_window(snapshots_dir, margin=6 * 3600):
             "ready": True,
             "nlbw": oldest.get("nlbw") or {},
             "wan": oldest.get("wan") or {},
+            "client_ips": oldest.get("client_ips") or {},
             "target_ips": oldest.get("target_ips") or {},
             "proxy_clients": oldest.get("proxy_clients") or {},
             "proxy_sites": oldest.get("proxy_sites") or {},
@@ -400,6 +466,7 @@ def load_window(snapshots_dir, margin=6 * 3600):
         "ready": False,
         "nlbw": {},
         "wan": {},
+        "client_ips": {},
         "target_ips": {},
         "proxy_clients": {},
         "proxy_sites": {},
@@ -477,9 +544,9 @@ def collect_nlbw_cur_raw():
                 else:
                     continue
 
-            # 排除非业务类纯内部广播与 port=0 的海量局域网大流量备份
-            if port == 0:
-                continue
+            # 排除非业务类纯内部广播 (保留 port=0 的底层直接路由与 BT/P2P 大流量)
+            # if port == 0:
+            #     continue
 
             if mac not in nlbw_cur_raw:
                 nlbw_cur_raw[mac] = {"rx": 0, "tx": 0, "ip": ip}
@@ -514,6 +581,7 @@ def main():
                 "time_str": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(now_ts)),
                 "wan": {"ifname": get_wan_interface(), "rx": read_wan_bytes(get_wan_interface())[0], "tx": read_wan_bytes(get_wan_interface())[1]},
                 "nlbw": collect_nlbw_cur_raw(),
+                "client_ips": collect_nft_client_cur_raw(),
                 "target_ips": collect_target_ip_cur_raw(),
                 "proxy_clients": proxy_clients,
                 "proxy_sites": proxy_sites,
@@ -522,6 +590,11 @@ def main():
             wrx, wtx = read_wan_bytes(wan_if)
             snap_payload["wan"] = {"ifname": wan_if, "rx": wrx, "tx": wtx}
             safe_atomic_json_dump(snap_payload, f"{snapshots_dir}/snap_{now_ts}.json")
+            # 立即将内核当前计数器保存到持久化规则文件中，确保重启后不丢数
+            try:
+                subprocess.run("nft list table inet dailyreport_tracker > /etc/dailyreport/data/nft_tracker.rules 2>/dev/null", shell=True)
+            except Exception:
+                pass
             cutoff_ts = now_ts - (48 * 3600)
             for fname in os.listdir(snapshots_dir):
                 if not (fname.startswith("snap_") and fname.endswith(".json")):
@@ -542,6 +615,7 @@ def main():
     window = load_window(snapshots_dir)
     base_data = window["nlbw"]
     wan_base_data = window["wan"]
+    base_client_ips = window.get("client_ips", {})
     base_ips = window["target_ips"]
     base_proxy_clients = window.get("proxy_clients", {})
     base_proxy_sites = window.get("proxy_sites", {})
@@ -608,11 +682,13 @@ def main():
     devices = {}
     window_ready = bool(window.get("ready"))
     nlbw_cur_raw = collect_nlbw_cur_raw() if (enable_traffic and window_ready) else {}
+    live_nft_clients = collect_nft_client_cur_raw() if window_ready else {}
     live_proxy_clients, live_proxy_sites = collect_proxy_controller_stats() if window_ready else ({}, {})
 
     if not window_ready:
         base_data = {}
         wan_base_data = {}
+        base_client_ips = {}
         base_ips = {}
         base_proxy_clients = {}
         base_proxy_sites = {}
@@ -635,6 +711,17 @@ def main():
                 if l_mac == mac:
                     ip = lease_ip
                     break
+
+        # 融合内核最前沿 (Clash接管前) 真实流量 (若内核前沿统计出更大值，优先采用前沿物理计数)
+        if ip and ip in live_nft_clients:
+            nft_cur = live_nft_clients[ip]
+            nft_base = base_client_ips.get(ip, {"rx": 0, "tx": 0})
+            nft_diff_rx = nft_cur["rx"] - nft_base["rx"] if nft_cur["rx"] >= nft_base["rx"] else nft_cur["rx"]
+            nft_diff_tx = nft_cur["tx"] - nft_base["tx"] if nft_cur["tx"] >= nft_base["tx"] else nft_cur["tx"]
+            if nft_diff_rx > diff_rx:
+                diff_rx = nft_diff_rx
+            if nft_diff_tx > diff_tx:
+                diff_tx = nft_diff_tx
 
         # 融合代理核心记录的实时流量 (若该 IP 走代理产生可观下行，平滑归并)
         if ip and ip in live_proxy_clients:
@@ -669,16 +756,40 @@ def main():
         wan_phy_rx = 0
         wan_phy_tx = 0
     else:
+        b_if = wan_base_data.get("ifname", wan_if)
         b_wrx = wan_base_data.get("rx", 0)
         b_wtx = wan_base_data.get("tx", 0)
+
+        # 若基准快照记录的是逻辑网口 (如 pppoe-wan)，以该网口现值做减法；若当前网口已切换，平滑取当前口
+        if b_if != wan_if:
+            b_cur_rx, b_cur_tx = read_wan_bytes(b_if)
+            if b_cur_rx > 0 or b_cur_tx > 0:
+                cur_wrx, cur_wtx = b_cur_rx, b_cur_tx
+
         # 针对断线重拨、接口重置的安全处理
         wan_phy_rx = cur_wrx - b_wrx if cur_wrx >= b_wrx else cur_wrx
         wan_phy_tx = cur_wtx - b_wtx if cur_wtx >= b_wtx else cur_wtx
 
     # 核心总览数据 (实事求是呈现真实硬件物理值)
-    wan_total_rx = wan_phy_rx if wan_phy_rx > 0 else dev_total_rx
-    wan_total_tx = wan_phy_tx if wan_phy_tx > 0 else dev_total_tx
+    wan_total_rx = max(wan_phy_rx, dev_total_rx)
+    wan_total_tx = max(wan_phy_tx, dev_total_tx)
     wan_total = wan_total_rx + wan_total_tx
+
+    # 将路由器本机开销作为独立项纳入设备榜单，设备名称干净规范
+    router_rx = wan_total_rx - dev_total_rx if wan_total_rx > dev_total_rx else 0
+    router_tx = wan_total_tx - dev_total_tx if wan_total_tx > dev_total_tx else 0
+    if router_rx + router_tx > 0:
+        r_name = "OpenWrt"
+        devices["00:e0:70:87:cd:69"] = {
+            "name": r_name,
+            "display_ip": "192.168.1.1",
+            "wan_rx": router_rx,
+            "wan_tx": router_tx,
+            "total": router_rx + router_tx
+        }
+        # 重新拉平各设备求和
+        dev_total_rx = wan_total_rx
+        dev_total_tx = wan_total_tx
 
     # 3. 生成设备排行 HTML 与摘要列表 (严格按硬件真实底层采集，绝不人为掺水/平摊/计算分配)
     dev_table_rows = ""
@@ -710,8 +821,14 @@ def main():
         except Exception:
             pass
 
-        # 载入 DNS 映射字典
+        # 载入 DNS 映射字典 与 Fake-IP 反查字典
         ip_to_domain = {}
+        # 1. 优先载入 OpenClash Fake-IP 字典 (解析 198.18.0.0/16 域名)
+        fake_ip_dict = load_fake_ip_dict()
+        if fake_ip_dict:
+            ip_to_domain.update(fake_ip_dict)
+
+        # 2. 补充本地 dnsmasq 捕获的公共 DNS 映射
         dns_cache_file = "/root/dns_cache.log"
         if os.path.exists(dns_cache_file):
             try:
@@ -720,7 +837,7 @@ def main():
                         parts = line.strip().split(",")
                         if len(parts) >= 2:
                             dip, dname = parts[0].strip(), parts[1].strip()
-                            if dip and dname:
+                            if dip and dname and dip not in ip_to_domain:
                                 ip_to_domain[dip] = dname
             except Exception:
                 pass
@@ -781,7 +898,7 @@ def main():
             except Exception:
                 pass
 
-        # 排序并展示前 15 名
+        # 排序并展示前 15 名 (严格按总流量排名)
         sorted_sites = sorted(sites_delta.items(), key=lambda x: x[1][0] + x[1][1], reverse=True)[:15]
         idx = 1
         for dom, (dl, ul) in sorted_sites:
@@ -790,11 +907,10 @@ def main():
             site_table_rows += f"<tr><td style='padding:6px 10px;border-bottom:1px solid #f0f0f0;color:#666;text-align:center;'>{idx}</td><td style='padding:6px 10px;border-bottom:1px solid #f0f0f0;font-family:monospace;color:#333;'>{dom}</td><td style='padding:6px 10px;border-bottom:1px solid #f0f0f0;color:#1890ff;text-align:right;'>⬇️ {fmt_bytes(dl)}</td><td style='padding:6px 10px;border-bottom:1px solid #f0f0f0;color:#52c41a;text-align:right;'>⬆️ {fmt_bytes(ul)}</td><td style='padding:6px 10px;border-bottom:1px solid #f0f0f0;font-weight:700;color:#fa8c16;text-align:right;'>{fmt_bytes(dl+ul)}</td></tr>\n"
             idx += 1
 
-    if not site_table_rows:
-        site_table_rows = "<tr><td colspan='4' style='padding:12px;text-align:center;color:#999;'>今日暂无网站或公网 IP 访问记录</td></tr>"
-
-    if not site_table_rows:
-        site_table_rows = "<tr><td colspan='4' style='padding:12px;text-align:center;color:#999;'>暂无访问记录</td></tr>"
+        if not site_table_rows:
+            site_table_rows = "<tr><td colspan='5' style='padding:12px;text-align:center;color:#999;'>今日暂无网站或公网 IP 访问记录</td></tr>"
+    else:
+        site_table_rows = "<tr><td colspan='5' style='padding:12px;text-align:center;color:#999;'>网站流量统计功能已停用</td></tr>"
 
     # 导出纯文本流量摘要供 Gotify / 告警通道复用
     try:
@@ -815,13 +931,13 @@ def main():
                 top_site_lines.append(f"  • {dom}: ⬇️{fmt_bytes(dl)} ⬆️{fmt_bytes(ul)}")
 
         if lang == "en":
-            summary_text = f"WAN Bandwidth: ⬇️{fmt_bytes(wan_total_rx)} ⬆️{fmt_bytes(wan_total_tx)} (Clients: {fmt_bytes(dev_total_rx + dev_total_tx)}){top_dev_str}"
+            summary_text = f"WAN Bandwidth: ⬇️{fmt_bytes(wan_total_rx)} ⬆️{fmt_bytes(wan_total_tx)} (Total: {fmt_bytes(dev_total_rx + dev_total_tx)}){top_dev_str}"
             if top_dev_lines:
                 summary_text += "\n📱 Top 5 Devices:\n" + "\n".join(top_dev_lines)
             if top_site_lines:
                 summary_text += "\n🌐 Top 5 Visited Sites:\n" + "\n".join(top_site_lines)
         else:
-            summary_text = f"公网带宽: ⬇️{fmt_bytes(wan_total_rx)} ⬆️{fmt_bytes(wan_total_tx)} (终端合计: {fmt_bytes(dev_total_rx + dev_total_tx)}){top_dev_str}"
+            summary_text = f"公网带宽: ⬇️{fmt_bytes(wan_total_rx)} ⬆️{fmt_bytes(wan_total_tx)} (总计: {fmt_bytes(dev_total_rx + dev_total_tx)}){top_dev_str}"
             if top_dev_lines:
                 summary_text += "\n📱 设备消耗 Top 5:\n" + "\n".join(top_dev_lines)
             if top_site_lines:
@@ -838,7 +954,6 @@ def main():
         lbl_rx = "⬇️ WAN Download"
         lbl_tx = "⬆️ WAN Upload"
         lbl_tot = "🔄 Total WAN Traffic"
-        lbl_dev_sub = "Clients HW"
         title_devs = "📱 LAN Clients WAN Traffic Ranking"
         th_dev_name = "Device Name"
         th_dev_ip = "IP / MAC"
@@ -855,7 +970,6 @@ def main():
         lbl_rx = "⬇️ 公网下载"
         lbl_tx = "⬆️ 公网上传"
         lbl_tot = "🔄 公网总吞吐"
-        lbl_dev_sub = "终端直连"
         title_devs = "📱 局域网各设备外网流量排行"
         th_dev_name = "设备名称"
         th_dev_ip = "IP / MAC"
@@ -875,17 +989,14 @@ def main():
             <div style='flex:1;background:#fff1f0;border:1px solid #ffa39e;border-radius:6px;padding:12px;text-align:center;'>
                 <div style='font-size:12px;color:#666;margin-bottom:4px;'>{lbl_rx}</div>
                 <div style='font-size:18px;font-weight:bold;color:#cf1322;'>{fmt_bytes(wan_total_rx)}</div>
-                <div style='font-size:11px;color:#888;margin-top:3px;'>{lbl_dev_sub}: {fmt_bytes(dev_total_rx)}</div>
             </div>
             <div style='flex:1;background:#f6ffed;border:1px solid #b7eb8f;border-radius:6px;padding:12px;text-align:center;'>
                 <div style='font-size:12px;color:#666;margin-bottom:4px;'>{lbl_tx}</div>
                 <div style='font-size:18px;font-weight:bold;color:#389e0d;'>{fmt_bytes(wan_total_tx)}</div>
-                <div style='font-size:11px;color:#888;margin-top:3px;'>{lbl_dev_sub}: {fmt_bytes(dev_total_tx)}</div>
             </div>
             <div style='flex:1;background:#fff7e6;border:1px solid #ffd591;border-radius:6px;padding:12px;text-align:center;'>
                 <div style='font-size:12px;color:#666;margin-bottom:4px;'>{lbl_tot}</div>
                 <div style='font-size:18px;font-weight:700;color:#fa8c16;'>{fmt_bytes(wan_total)}</div>
-                <div style='font-size:11px;color:#888;margin-top:3px;'>{lbl_dev_sub}: {fmt_bytes(dev_total_rx + dev_total_tx)}</div>
             </div>
         </div>
 

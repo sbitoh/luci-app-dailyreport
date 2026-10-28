@@ -72,8 +72,9 @@
 根据你固件所使用的包管理器选择对应格式：
 
 #### 传统 `opkg` 环境 (OpenWrt 24.10, 23.05 及历史固件)
-- 📦 **最新版 v1.5.0**: [点击下载 luci-app-dailyreport_1.5.0-1_all.ipk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.5.0-1_all.ipk)
-- 📦 **上一版 v1.4.0**: [点击下载 luci-app-dailyreport_1.4.0-1_all.ipk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.4.0-1_all.ipk)
+- 📦 **最新版 v1.6.0**: [点击下载 luci-app-dailyreport_1.6.0-1_all.ipk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.6.0-1_all.ipk)
+- 📦 **上一版 v1.5.0**: [点击下载 luci-app-dailyreport_1.5.0-1_all.ipk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.5.0-1_all.ipk)
+- 📦 **历史版 v1.4.0**: [点击下载 luci-app-dailyreport_1.4.0-1_all.ipk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.4.0-1_all.ipk)
 - 📦 **历史版 v1.3.2**: [点击下载 luci-app-dailyreport_1.3.2-1_all.ipk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.3.2-1_all.ipk)
 - 📦 **历史版 v1.3.1**: [点击下载 luci-app-dailyreport_1.3.1-1_all.ipk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.3.1-1_all.ipk)
 - 📦 **历史版 v1.3.0**: [点击下载 luci-app-dailyreport_1.3.0-1_all.ipk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.3.0-1_all.ipk)
@@ -83,14 +84,15 @@
 
 OpenWrt 终端一键安装：
 ```bash
-wget -O /tmp/luci-app-dailyreport.ipk https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.5.0-1_all.ipk
+wget -O /tmp/luci-app-dailyreport.ipk https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.6.0-1_all.ipk
 opkg install /tmp/luci-app-dailyreport.ipk
 /etc/init.d/rpcd reload
 ```
 
 #### 新版 `apk` (APK v3) 环境 (OpenWrt SNAPSHOT / 主线开发版)
-- 🚀 **最新版 v1.5.0 APK**: [点击下载 luci-app-dailyreport-1.5.0-r1.apk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport-1.5.0-r1.apk)
-- 🚀 **上一版 v1.4.0 APK**: [点击下载 luci-app-dailyreport-1.4.0-r1.apk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport-1.4.0-r1.apk)
+- 🚀 **最新版 v1.6.0 APK**: [点击下载 luci-app-dailyreport-1.6.0-r1.apk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport-1.6.0-r1.apk)
+- 🚀 **上一版 v1.5.0 APK**: [点击下载 luci-app-dailyreport-1.5.0-r1.apk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport-1.5.0-r1.apk)
+- 🚀 **历史版 v1.4.0 APK**: [点击下载 luci-app-dailyreport-1.4.0-r1.apk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport-1.4.0-r1.apk)
 - 🚀 **历史版 v1.3.2 APK**: [点击下载 luci-app-dailyreport-1.3.2-r1.apk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport-1.3.2-r1.apk)
 - 🚀 **历史版 v1.3.1 APK**: [点击下载 luci-app-dailyreport-1.3.1-r1.apk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport-1.3.1-r1.apk)
 - 🚀 **历史版 v1.3.0 APK**: [点击下载 luci-app-dailyreport-1.3.0-r1.apk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport-1.3.0-r1.apk)
@@ -98,7 +100,7 @@ opkg install /tmp/luci-app-dailyreport.ipk
 
 OpenWrt 终端一键安装：
 ```bash
-wget -O /tmp/luci-app-dailyreport.apk https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport-1.5.0-r1.apk
+wget -O /tmp/luci-app-dailyreport.apk https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport-1.6.0-r1.apk
 apk add --allow-untrusted /tmp/luci-app-dailyreport.apk
 /etc/init.d/rpcd reload
 ```
@@ -117,6 +119,12 @@ apk add --allow-untrusted /tmp/luci-app-dailyreport.apk
 ---
 
 ## 📝 更新日志 (Release Notes)
+
+### v1.6.0 (2026-10-28)
+- **外网 IP 与网站流量统计内核前置化**：将下行数据统计规则迁移至内核 `inet prerouting_track`（priority -300），在物理 WAN 网口入向第一时间捕获真实对端 IP，彻底解决因 OpenClash 代理或 NAT 转发改写源 IP 导致的下载流量漏记。
+- **支持 OpenClash Fake-IP 域名反查**：深度适配 OpenClash 二进制历史数据库，自动将 `198.18.0.0/16` 代理流量映射反查还原为真实域名（如 Google、YouTube、GitHub 等），无需人工配置。
+- **nftables 动态集合持久化**：在定时快照与服务启停时自动落盘并还原内核计数器规则，杜绝因服务重启导致计数器归零断崖。
+- **界面与数据纯净度提升**：报表严格基于物理捕获与真实 IP 排序展示，去除任何虚假占位行；局域网终端与外网公网流量完全闭环对齐。
 
 ### v1.5.0 (2026-10-26)
 - **修复 PPPoE 宽带重拨导致 WAN 总量归零**：将底层公网流量接口优先绑定为真实的物理承载网卡（如 `eth1`），解决因运营商定时断线重拨导致虚拟接口 `pppoe-wan` 计数器清零、单日公网下载总量失真的问题。
