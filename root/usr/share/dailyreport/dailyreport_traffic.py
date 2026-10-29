@@ -414,6 +414,9 @@ def load_window(snapshots_dir, margin=6 * 3600):
                 continue
             if not isinstance(payload, dict) or "nlbw" not in payload:
                 continue
+            # 快照必须包含完整的 client_ips 与 target_ips 结构，避免旧格式快照导致基准归零泄漏历史总累计
+            if not payload.get("client_ips") or not payload.get("target_ips"):
+                continue
             payload.setdefault("ts", file_ts)
 
             diff = abs(file_ts - target_ts)
@@ -715,13 +718,20 @@ def main():
         # 融合内核最前沿 (Clash接管前) 真实流量 (若内核前沿统计出更大值，优先采用前沿物理计数)
         if ip and ip in live_nft_clients:
             nft_cur = live_nft_clients[ip]
-            nft_base = base_client_ips.get(ip, {"rx": 0, "tx": 0})
-            nft_diff_rx = nft_cur["rx"] - nft_base["rx"] if nft_cur["rx"] >= nft_base["rx"] else nft_cur["rx"]
-            nft_diff_tx = nft_cur["tx"] - nft_base["tx"] if nft_cur["tx"] >= nft_base["tx"] else nft_cur["tx"]
-            if nft_diff_rx > diff_rx:
-                diff_rx = nft_diff_rx
-            if nft_diff_tx > diff_tx:
-                diff_tx = nft_diff_tx
+            if ip in base_client_ips:
+                nft_base = base_client_ips[ip]
+                nft_diff_rx = nft_cur["rx"] - nft_base["rx"] if nft_cur["rx"] >= nft_base["rx"] else nft_cur["rx"]
+                nft_diff_tx = nft_cur["tx"] - nft_base["tx"] if nft_cur["tx"] >= nft_base["tx"] else nft_cur["tx"]
+                if nft_diff_rx > diff_rx:
+                    diff_rx = nft_diff_rx
+                if nft_diff_tx > diff_tx:
+                    diff_tx = nft_diff_tx
+            else:
+                # 基准快照缺失该 IP (新入网设备或未记录)，若当前值异常巨大(>100MB)，说明为开机历史累计，不采用减0避免暴增
+                if nft_cur["rx"] < 100 * 1024 * 1024 and nft_cur["rx"] > diff_rx:
+                    diff_rx = nft_cur["rx"]
+                if nft_cur["tx"] < 100 * 1024 * 1024 and nft_cur["tx"] > diff_tx:
+                    diff_tx = nft_cur["tx"]
 
         # 融合代理核心记录的实时流量 (若该 IP 走代理产生可观下行，平滑归并)
         if ip and ip in live_proxy_clients:
