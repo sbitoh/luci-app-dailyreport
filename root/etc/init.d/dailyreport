@@ -37,8 +37,16 @@ restore_snapshot() {
     fi
 
     # 还原 nftables dailyreport_tracker
+    # 注意：必须"先删表再加载"。直接 nft -f 会把整套规则再叠加一份到已存在的表上，
+    # 每次重启规则就翻一倍，流量也被重复计数（1.6.0 的持久化踩过这个坑）。
     if [ -f "$PERSIST_DIR/nft_tracker.rules" ] && command -v nft >/dev/null 2>&1; then
-        nft -f "$PERSIST_DIR/nft_tracker.rules" 2>/dev/null || true
+        if nft list table inet dailyreport_tracker >/dev/null 2>&1; then
+            nft delete table inet dailyreport_tracker 2>/dev/null || true
+        fi
+        if ! nft -f "$PERSIST_DIR/nft_tracker.rules" 2>/dev/null; then
+            # 加载失败则退回空表，保证记账链路可用（计数器从 0 开始）
+            init_nftables_tracker
+        fi
     fi
 }
 
