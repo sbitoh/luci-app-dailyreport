@@ -31,7 +31,8 @@ OpenWrt 智能系统状态与网络流量日报 LuCI 插件 (Daily Report & Secu
 根据你固件所使用的包管理器选择对应格式：
 
 #### 传统 `opkg` 环境 (OpenWrt 24.10, 23.05 及历史固件)
-- 📦 **最新版 v1.6.0**: [点击下载 luci-app-dailyreport_1.6.0-1_all.ipk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.6.0-1_all.ipk)
+- 📦 **最新版 v1.6.1**: [点击下载 luci-app-dailyreport_1.6.1-1_all.ipk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.6.1-1_all.ipk)
+- 📦 **上一版 v1.6.0**: [点击下载 luci-app-dailyreport_1.6.0-1_all.ipk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.6.0-1_all.ipk)
 - 📦 **历史版本 v1.5.0**: [点击下载 luci-app-dailyreport_1.5.0-1_all.ipk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.5.0-1_all.ipk)
 - 📦 **历史版本 v1.4.0**: [点击下载 luci-app-dailyreport_1.4.0-1_all.ipk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.4.0-1_all.ipk)
 - 📦 **历史版 v1.3.2**: [点击下载 luci-app-dailyreport_1.3.2-1_all.ipk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.3.2-1_all.ipk)
@@ -43,13 +44,14 @@ OpenWrt 智能系统状态与网络流量日报 LuCI 插件 (Daily Report & Secu
 
 OpenWrt 终端一键安装：
 ```bash
-wget -O /tmp/luci-app-dailyreport.ipk https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.6.0-1_all.ipk
+wget -O /tmp/luci-app-dailyreport.ipk https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport_1.6.1-1_all.ipk
 opkg install /tmp/luci-app-dailyreport.ipk
 /etc/init.d/rpcd reload
 ```
 
 #### 新版 `apk` (APK v3) 环境 (OpenWrt SNAPSHOT / 主线开发版)
-- 🚀 **最新版 v1.6.0 APK**: [点击下载 luci-app-dailyreport-1.6.0-r1.apk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport-1.6.0-r1.apk)
+- 🚀 **最新版 v1.6.1 APK**: [点击下载 luci-app-dailyreport-1.6.1-r1.apk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport-1.6.1-r1.apk)
+- 🚀 **上一版 v1.6.0 APK**: [点击下载 luci-app-dailyreport-1.6.0-r1.apk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport-1.6.0-r1.apk)
 - 🚀 **历史版本 v1.5.0 APK**: [点击下载 luci-app-dailyreport-1.5.0-r1.apk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport-1.5.0-r1.apk)
 - 🚀 **历史版本 v1.4.0 APK**: [点击下载 luci-app-dailyreport-1.4.0-r1.apk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport-1.4.0-r1.apk)
 - 🚀 **历史版 v1.3.2 APK**: [点击下载 luci-app-dailyreport-1.3.2-r1.apk](https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport-1.3.2-r1.apk)
@@ -59,7 +61,7 @@ opkg install /tmp/luci-app-dailyreport.ipk
 
 OpenWrt 终端一键安装：
 ```bash
-wget -O /tmp/luci-app-dailyreport.apk https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport-1.6.0-r1.apk
+wget -O /tmp/luci-app-dailyreport.apk https://raw.githubusercontent.com/sbitoh/luci-app-dailyreport/main/bin/packages/luci-app-dailyreport-1.6.1-r1.apk
 apk add --allow-untrusted /tmp/luci-app-dailyreport.apk
 /etc/init.d/rpcd reload
 ```
@@ -74,6 +76,15 @@ apk add --allow-untrusted /tmp/luci-app-dailyreport.apk
 3. 点击 **保存并应用**，点击 **立即生成并发送日报** 即可立即测试。
 
 ## 📝 更新日志 (Release Notes)
+
+### v1.6.1 (2026-11-19)
+- 🔒 **移除代理控制台探测中的硬编码密钥**：密钥一律从 `/etc/openclash/config.yaml` 动态读取，源码与安装包中不再保存任何真实凭据。
+- 🛡️ **推送链路加固**：Base64 主题编码改为通过参数/管道传入，杜绝主机名等含特殊字符时触发引号注入；临时发信配置先以 600 权限预建再写入，消除中间窗口期。
+- ⚙️ **新增「校验 SMTP 服务器证书」开关**：默认关闭以兼容内网自签邮件服务器，使用公共邮箱服务时可手动开启。
+- 📈 **修正流量过滤口径**：不再误删 `172.1-15`、`172.32+` 等合法公网地址，仅过滤 `172.16.0.0/12` 虚拟网段，修复个别站点与客户端的流量漏计。
+- 🔁 **增量基准推进逻辑修正**：改为「任一推送通道成功才推进」；只启用 Gotify 的用户不再出现拦截次数无限膨胀，手动测试发送不再消耗增量。
+- 🧹 **并发与健壮性**：新增 `flock` 并发锁，避免整点快照与日报相互踩踏；DHCP 主机名进 HTML 前统一转义；UCI 解析改为 `split("=",1)`，名称含等号不再被截断。
+- 📦 **构建可移植**：打包脚本去掉写死的绝对路径，可在任意目录与 CI 环境直接构建。
 
 ### v1.6.0 (2026-10-28)
 - **外网 IP 与网站流量统计内核前置化**：将下行数据统计规则迁移至内核 `inet prerouting_track`（priority -300），在物理 WAN 网口入向第一时间捕获真实对端 IP，彻底解决因 OpenClash 代理或 NAT 转发改写源 IP 导致的下载流量漏记。

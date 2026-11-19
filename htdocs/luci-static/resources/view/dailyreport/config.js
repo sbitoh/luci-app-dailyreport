@@ -109,6 +109,11 @@ return view.extend({
 		o.depends('email_enabled', '1');
 		o.default = '1';
 
+		o = s.option(form.Flag, 'smtp_verify_ssl', tr('校验 SMTP 服务器证书', 'Verify SMTP Server Certificate'));
+		o.depends('email_enabled', '1');
+		o.default = '0';
+		o.description = tr('自建/内网邮件服务器（自签或无证书）请保持关闭；使用公共邮件服务时建议开启。', 'Keep off for LAN / self-signed mail servers; turn on when using a public mail provider.');
+
 		o = s.option(form.Value, 'smtp_user', tr('发件人账号 / 用户名', 'Username / Sender Account'));
 		o.depends('email_enabled', '1');
 		o.placeholder = 'router@example.com';

@@ -13,6 +13,17 @@ ENABLED=$(get_cfg "enabled")
 ALERT_TEMP=$(get_cfg "alert_temp")
 [ -z "$ALERT_TEMP" ] && ALERT_TEMP=75
 
+# 报表语言：必须在任何分支使用前定义（跨天重置块会把它传给 traffic.py）
+REPORT_LANG=$(get_cfg "lang")
+[ -z "$REPORT_LANG" ] && REPORT_LANG="zh_cn"
+
+# 并发锁：整点快照 / 5 分钟巡检 / 每日日报可能同时被 cron 拉起，非阻塞抢占，抢不到静默退出
+# （test 模式由网页点击触发，不参与抢占，避免用户点击被无声丢弃）
+if [ "$1" != "test" ] && command -v flock >/dev/null 2>&1; then
+    exec 9>"/tmp/dailyreport.lock"
+    flock -n 9 || exit 0
+fi
+
 # 0. 检查是否跨天并重置每日流量统计
 TODAY_TAG=$(date +%Y%m%d)
 PERSIST_DIR="/etc/dailyreport/data"
@@ -138,7 +149,10 @@ DEVICE_TABLE_ROWS=""
 while IFS=$'\t' read -r D_IP D_NAME; do
     [ -z "$D_IP" ] && continue
     [ "$D_NAME" = "*" ] && D_NAME="未知设备"
-    DEVICE_TABLE_ROWS="${DEVICE_TABLE_ROWS}<tr><td style='border:1px solid #eee;padding:8px;font-weight:600;'>$D_NAME</td><td style='border:1px solid #eee;padding:8px;font-family:monospace;'>$D_IP</td></tr>"
+    # DHCP 主机名由终端自己上报，必须转义后再进 HTML（防注入/破坏版式）
+    D_NAME_ESC=$(printf '%s' "$D_NAME" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
+    D_IP_ESC=$(printf '%s' "$D_IP" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
+    DEVICE_TABLE_ROWS="${DEVICE_TABLE_ROWS}<tr><td style='border:1px solid #eee;padding:8px;font-weight:600;'>$D_NAME_ESC</td><td style='border:1px solid #eee;padding:8px;font-family:monospace;'>$D_IP_ESC</td></tr>"
 done < "$ONLINE_DEVS_TMP"
 
 # 2. 流量统计与网站排行 (执行前先触发一次实时增量采集更新)
@@ -149,8 +163,6 @@ command -v nlbw >/dev/null 2>&1 && nlbw -c commit >/dev/null 2>&1 || true
 TRAFFIC_HTML=""
 TRAFFIC_SUMMARY_FILE="/tmp/dailyreport_traffic_summary.txt"
 TRAFFIC_SCRIPT="/usr/share/dailyreport/dailyreport_traffic.py"
-REPORT_LANG=$(get_cfg "lang")
-[ -z "$REPORT_LANG" ] && REPORT_LANG="zh_cn"
 
 if [ -f "$TRAFFIC_SCRIPT" ]; then
     TRAFFIC_HTML=$(python3 "$TRAFFIC_SCRIPT" "$REPORT_LANG" 2>/dev/null)
@@ -376,20 +388,24 @@ SMTP_PORT=$(get_cfg "smtp_port")
 SMTP_USER=$(get_cfg "smtp_user")
 SMTP_PASS=$(get_cfg "smtp_pass")
 SMTP_SSL=$(get_cfg "smtp_ssl")
+# SMTP 证书校验：默认 0（兼容内网自签/无证书场景，保持旧行为）；用户可显式打开为 1
+SMTP_VERIFY=$(get_cfg "smtp_verify_ssl")
+[ -z "$SMTP_VERIFY" ] && SMTP_VERIFY=0
 
 # 保存一份最新生成的 HTML 邮件用于预览或截图 (完全脱敏)
 echo "$HTML_BODY" > /tmp/dailyreport_email_preview.html 2>/dev/null
 
 if [ "$EMAIL_ENABLED" = "1" ] && [ -n "$MAIL_TO" ]; then
-    # 智能 Base64 编码主题（优先 ucode / python3 / openssl / base64，彻底避免精简版 BusyBox 无 base64 命令的问题）
-    if command -v ucode >/dev/null 2>&1; then
-        SUBJ_B64=$(ucode -e "print(b64enc('$MAIL_SUBJECT'))" 2>/dev/null)
-    elif command -v python3 >/dev/null 2>&1; then
+    # 智能 Base64 编码主题（按可靠性排序：python3 → openssl → base64 → ucode）
+    # 主题只通过 argv / 管道 / 环境变量传入，绝不拼进解释器源码，避免引号注入
+    if command -v python3 >/dev/null 2>&1; then
         SUBJ_B64=$(python3 -c "import base64, sys; sys.stdout.write(base64.b64encode(sys.argv[1].encode('utf-8')).decode('utf-8'))" "$MAIL_SUBJECT" 2>/dev/null)
     elif command -v openssl >/dev/null 2>&1; then
         SUBJ_B64=$(printf "%s" "$MAIL_SUBJECT" | openssl base64 -A 2>/dev/null)
     elif command -v base64 >/dev/null 2>&1; then
         SUBJ_B64=$(printf "%s" "$MAIL_SUBJECT" | base64 | tr -d '\r\n')
+    elif command -v ucode >/dev/null 2>&1; then
+        SUBJ_B64=$(SUBJ_IN="$MAIL_SUBJECT" ucode -e 'print(b64enc(getenv("SUBJ_IN")));' 2>/dev/null)
     else
         SUBJ_B64=""
     fi
@@ -419,16 +435,12 @@ if [ "$EMAIL_ENABLED" = "1" ] && [ -n "$MAIL_TO" ]; then
     # 保存一份最新生成的 HTML 邮件用于预览或截图 (完全脱敏)
     cp -f "$SEND_TMP" /tmp/dailyreport_email_preview.html 2>/dev/null
 
-    # 成功构建报文后，落盘更新增量基准文件（确保下次发送只统计最新增量）
-    cp "$CURR_ERR_FILE" "$LAST_ERR_FILE" 2>/dev/null
-    cp "$CURR_LOGIN_FILE" "$LAST_LOGIN_FILE" 2>/dev/null
-    [ -f "$CURR_BANIP_FILE" ] && cp "$CURR_BANIP_FILE" "$LAST_BANIP_FILE" 2>/dev/null
-    [ -f "$CURR_NFT_FILE" ] && cp "$CURR_NFT_FILE" "$LAST_NFT_FILE" 2>/dev/null
+    # 增量基准的推进已移到全部通道推送之后统一处理（见 6.5 节），避免只发邮件不发 Gotify 时基准错位
 
     # 优先使用 Python 内置的原生 smtplib 发送（零系统命令依赖，100% 自带且稳定支持 SSL/TLS）
     if [ -n "$SMTP_SERVER" ] && [ -n "$SMTP_USER" ] && [ -n "$SMTP_PASS" ] && command -v python3 >/dev/null 2>&1; then
         echo "[INFO] 正在通过 SMTP 服务器 ($SMTP_SERVER:$SMTP_PORT) 发送邮件..."
-        PY_SEND_RES=$(python3 - "$SMTP_SERVER" "$SMTP_PORT" "$SMTP_USER" "$SMTP_PASS" "$MAIL_FROM" "$MAIL_TO" "$SMTP_SSL" "$SEND_TMP" << 'PYEOF'
+        PY_SEND_RES=$(python3 - "$SMTP_SERVER" "$SMTP_PORT" "$SMTP_USER" "$SMTP_PASS" "$MAIL_FROM" "$MAIL_TO" "$SMTP_SSL" "$SEND_TMP" "$SMTP_VERIFY" << 'PYEOF'
 import sys, smtplib, ssl
 
 host = sys.argv[1]
@@ -439,14 +451,16 @@ mail_from = sys.argv[5] or user
 mail_to = sys.argv[6]
 use_ssl = sys.argv[7] == "1"
 mail_file = sys.argv[8]
+verify_ssl = len(sys.argv) > 9 and sys.argv[9] == "1"
 
 try:
     with open(mail_file, "rb") as f:
         msg_bytes = f.read()
 
     ctx = ssl.create_default_context()
-    ctx.check_hostname = False
-    ctx.verify_mode = ssl.CERT_NONE
+    if not verify_ssl:
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
 
     if use_ssl or port == 465:
         with smtplib.SMTP_SSL(host, port, context=ctx, timeout=15) as server:
@@ -468,6 +482,7 @@ PYEOF
 )
         if echo "$PY_SEND_RES" | grep -q "SUCCESS"; then
             echo "[SUCCESS] 邮件发送成功！"
+            EMAIL_OK=1
         else
             echo "[ERROR] 邮件发送失败，详细原因："
             echo "$PY_SEND_RES"
@@ -475,6 +490,8 @@ PYEOF
     elif [ -n "$SMTP_SERVER" ] && [ -n "$SMTP_USER" ] && [ -n "$SMTP_PASS" ] && command -v msmtp >/dev/null 2>&1; then
         MSMTP_CFG="/tmp/dailyreport_msmtp.cfg"
         [ -z "$SMTP_PORT" ] && SMTP_PORT=465
+        # 先用 umask 077 建一个 600 的空文件再写内容，消除"默认权限创建 → 后 chmod"的窗口期
+        ( umask 077; : > "$MSMTP_CFG" )
         cat << EOF > "$MSMTP_CFG"
 defaults
 auth on
@@ -498,6 +515,7 @@ EOF
         MSMTP_EXIT=$?
         if [ "$MSMTP_EXIT" -eq 0 ]; then
             echo "[SUCCESS] 邮件发送成功！"
+            EMAIL_OK=1
         else
             echo "[ERROR] 邮件发送失败 (退出码 $MSMTP_EXIT)，详细日志："
             cat /tmp/dailyreport_msmtp.log 2>/dev/null
@@ -506,7 +524,7 @@ EOF
     elif command -v msmtp >/dev/null 2>&1; then
         echo "[INFO] 使用系统默认 msmtp 配置发送邮件..."
         msmtp -t < "$SEND_TMP"
-        [ $? -eq 0 ] && echo "[SUCCESS] 邮件发送成功！" || echo "[ERROR] 邮件发送失败！"
+        [ $? -eq 0 ] && { echo "[SUCCESS] 邮件发送成功！"; EMAIL_OK=1; } || echo "[ERROR] 邮件发送失败！"
     else
         echo "[ERROR] 未检测到可用的邮件发信组件 (Python smtplib 或 msmtp)，请检查依赖！"
     fi
@@ -578,6 +596,7 @@ if [ "$GOTIFY_ENABLED" = "1" ] && [ -n "$GOTIFY_URL" ] && [ -n "$GOTIFY_TOKEN" ]
     G_CODE=$(echo "$G_RES" | tail -n 1)
     if [ "$G_CODE" = "200" ]; then
         echo "[SUCCESS] Gotify 消息推送成功！"
+        GOTIFY_OK=1
     else
         echo "[ERROR] Gotify 推送失败 (HTTP 状态码: $G_CODE)！响应："
         echo "$G_RES" | sed '$d'
@@ -586,6 +605,14 @@ elif [ "$1" = "test" ] && [ "$GOTIFY_ENABLED" != "1" ]; then
     echo "[INFO] Gotify 推送未启用，跳过 Gotify 测试。"
 elif [ "$1" = "test" ]; then
     echo "[WARN] Gotify 已启用，但未配置服务器地址或 Token，无法推送。"
+fi
+
+# 6.5 增量基准落盘：只要任一通道推送成功就推进基线；test 模式一律不动基线（保证测试无副作用）
+if [ "$1" != "test" ] && { [ "$EMAIL_OK" = "1" ] || [ "$GOTIFY_OK" = "1" ]; }; then
+    cp "$CURR_ERR_FILE" "$LAST_ERR_FILE" 2>/dev/null
+    cp "$CURR_LOGIN_FILE" "$LAST_LOGIN_FILE" 2>/dev/null
+    [ -n "$CURR_BANIP_FILE" ] && [ -f "$CURR_BANIP_FILE" ] && cp "$CURR_BANIP_FILE" "$LAST_BANIP_FILE" 2>/dev/null
+    [ -n "$CURR_NFT_FILE" ] && [ -f "$CURR_NFT_FILE" ] && cp "$CURR_NFT_FILE" "$LAST_NFT_FILE" 2>/dev/null
 fi
 
 # 执行安全关机倒计时 (当开启保护且超温时)

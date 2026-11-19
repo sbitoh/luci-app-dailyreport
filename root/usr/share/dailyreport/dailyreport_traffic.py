@@ -12,6 +12,7 @@ import sys
 import time
 import re
 import struct
+import ipaddress
 import urllib.request
 
 def normalize_target_domain(raw_target, lang="zh"):
@@ -226,7 +227,7 @@ def load_fake_ip_dict():
             try:
                 with open(db_path, "rb") as f:
                     data = f.read()
-                pattern = re.compile(b'\xc6\x12([\x00-\xff]{2})([a-zA-Z0-9][-a-zA-Z0-9.]+\.[a-zA-Z]{2,})')
+                pattern = re.compile(rb'\xc6\x12([\x00-\xff]{2})([a-zA-Z0-9][-a-zA-Z0-9.]+\.[a-zA-Z]{2,})')
                 for match in pattern.finditer(data):
                     suffix = match.group(1)
                     domain = match.group(2).decode("ascii", errors="ignore")
@@ -331,8 +332,8 @@ def collect_proxy_controller_stats():
     except Exception:
         pass
 
-    # 2. 默认常见组合探针
-    for p, s in [(9090, ""), (9090, "852172"), (7890, ""), (9999, "")]:
+    # 2. 默认常见组合探针（只试空密钥；密钥一律从 /etc/openclash/config.yaml 动态读取，绝不硬编码）
+    for p, s in [(9090, ""), (7890, ""), (9999, "")]:
         if (p, s) not in ports_and_secrets:
             ports_and_secrets.append((p, s))
 
@@ -536,9 +537,15 @@ def collect_nlbw_cur_raw():
             rx = int(r[rx_col])
             tx = int(r[tx_col])
 
-            # 排除局域网回环和 Docker 虚拟网段
-            if ip == "127.0.0.1" or ip.startswith("172."):
+            # 排除回环与 172.16.0.0/12（Docker/虚拟网段）；172.1-15 与 172.32+ 是合法公网地址，必须保留
+            if ip.startswith("127."):
                 continue
+            if ip.startswith("172."):
+                try:
+                    if ipaddress.ip_address(ip) in ipaddress.ip_network("172.16.0.0/12"):
+                        continue
+                except ValueError:
+                    continue
 
             # 若 MAC 缺失或为路由器，尝试通过 IP 反查真实发起终端的物理 MAC
             if not mac or mac in ["00:00:00:00:00:00", "00:e0:70:87:cd:69"]:
@@ -644,15 +651,15 @@ def main():
         for line in out.splitlines():
             if ".name=" in line:
                 sec = line.split(".")[1].split("=")[0]
-                val = line.split("=")[1].strip("'\"")
+                val = line.split("=", 1)[1].strip("'\"")
                 names[sec] = val
             elif ".ip=" in line:
                 sec = line.split(".")[1].split("=")[0]
-                val = line.split("=")[1].strip("'\"")
+                val = line.split("=", 1)[1].strip("'\"")
                 ips[sec] = val
             elif ".mac=" in line:
                 sec = line.split(".")[1].split("=")[0]
-                val = line.split("=")[1].strip("'\"")
+                val = line.split("=", 1)[1].strip("'\"")
                 macs[sec] = val
         for sec, name in names.items():
             if sec in macs:
