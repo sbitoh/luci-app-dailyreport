@@ -12,8 +12,17 @@ return view.extend({
 		]);
 	},
 	handleSaveApply: function(ev, mode) {
+		// 保存（写暂存）→ 提交到 /etc/config 并重启服务（让推送时间等立刻生效）→ 刷新页面
+		var zh = (uci.get('dailyreport', 'config', 'lang') || 'zh_cn') === 'zh_cn';
+		var msgFail = zh ? '保存成功，但应用失败：' : 'Saved, but apply failed: ';
 		return this.handleSave(ev).then(function() {
+			return fs.exec('/usr/share/dailyreport/dailyreport_apply.sh', []);
+		}).then(function(res) {
+			if (res && res.code !== 0)
+				throw new Error((res.stderr || res.stdout || '').trim() || ('exit ' + res.code));
 			window.location.reload();
+		}).catch(function(err) {
+			ui.addNotification(null, E('p', msgFail + (err && err.message ? err.message : err)), 'danger');
 		});
 	},
 	render: function(data) {

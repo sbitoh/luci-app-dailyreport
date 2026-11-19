@@ -4,7 +4,8 @@
 		"read": {
 			"cgi-io": [ "exec" ],
 			"file": {
-				"/usr/share/dailyreport/dailyreport_core.sh test": [ "exec" ]
+				"/usr/share/dailyreport/dailyreport_core.sh test": [ "exec" ],
+				"/usr/share/dailyreport/dailyreport_apply.sh": [ "exec" ]
 			},
 			"ubus": {
 				"luci": [ "setInitAction" ]
@@ -13,7 +14,8 @@
 		},
 		"write": {
 			"file": {
-				"/usr/share/dailyreport/dailyreport_core.sh test": [ "exec" ]
+				"/usr/share/dailyreport/dailyreport_core.sh test": [ "exec" ],
+				"/usr/share/dailyreport/dailyreport_apply.sh": [ "exec" ]
 			},
 			"uci": [ "dailyreport" ]
 		}
